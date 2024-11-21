@@ -2,6 +2,10 @@
 
 <meta charset="utf-8">
 
+<link rel="icon" href="{{ base_path }}/favicon.ico" type="image/x-icon">
+<link rel="shortcut icon" href="{{ base_path }}/favicon.ico" type="image/x-icon">
+
+
 {% include seo.html %}
 
 <link href="{% if site.atom_feed.path %}{{ site.atom_feed.path }}{% else %}{{ base_path }}/feed.xml{% endif %}" type="application/atom+xml" rel="alternate" title="{{ site.title }} Feed">
