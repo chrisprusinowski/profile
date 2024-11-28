@@ -9,8 +9,8 @@ redirect_from:
 
 {% include base_path %}
 
+
 # Christopher Prusinowski  
-4009 State Route 364, Canandaigua, NY 14424  
 (585) 445-4388 | christopher.prusinowski@gmail.com  
 
 ---
