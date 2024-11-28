@@ -1,6 +1,6 @@
 ---
-title: "Portfolio item number 1"
-excerpt: "Short description of portfolio item number 1<br/><img src='/images/500x300.png'>"
+title: "New Sales Pricing Methodology"
+excerpt: "A brief overview of how I helped restructure a SAAS product line's prices to increase ACV."
 collection: portfolio
 ---
 
