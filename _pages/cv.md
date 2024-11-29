@@ -37,11 +37,11 @@ September 2017 – May 2020
 **ConstructConnect, Canandaigua, NY (remote)**  
 *Senior Financial Analyst*  
 September 2021 - Present  
-- Designed and administered new compensation plans for 6 key go-to-market functions.  
-- Led remodeling of renewal pricing strategy for over $200m ARR across several lines of business.  
-- Developed new data pipelines for reporting on nearly 70k annual business transactions.  
-- Created and maintained in-house proposal tool to process over $25m of new business per year.  
-- Served as primary point of contact for executive team on all go-to-market analytics and strategic initiatives.  
+- Design and administer new compensation plans for 6 key go-to-market functions.  
+- Lead remodeling of renewal pricing strategy for over $200m ARR across several lines of business.  
+- Develop new data pipelines for reporting on nearly 70k annual business transactions.  
+- Create and maintain in-house proposal tool to process over $25m of new business per year.  
+- Serve as primary point of contact for executive team on all go-to-market analytics and strategic initiatives.  
 
 *Financial Analyst*  
 - Redeveloped pricing structure of flagship product to increase new average contract value over 10% in 6 months.  
