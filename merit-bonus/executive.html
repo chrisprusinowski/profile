@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Executive Summary — MeritCycle</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-role="exec">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">M</div>
+      <div><div class="logo-text">MeritCycle</div><div class="logo-sub">Compensation Planning</div></div>
+    </div>
+    <div class="sidebar-cycle-badge">
+      <div class="cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-status"><span class="status-dot"></span> Open — closes Apr 15, 2025</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Cycle</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge">7</span></a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
+      <div class="nav-section-label">Reports</div>
+      <a href="executive.html" class="nav-item active"><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label">Admin</div>
+      <a href="admin.html" class="nav-item"><span class="nav-icon">⚙</span> Cycle Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="role-switcher">
+        <label>Viewing as</label>
+        <select onchange="localStorage.setItem('mc_role',this.value); document.body.setAttribute('data-role',this.value)">
+          <option value="hr">HR / Comp Admin</option>
+          <option value="manager">Manager</option>
+          <option value="exec" selected>Executive</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="page-title">Executive Summary</div>
+        <div class="page-subtitle">Read-only overview of the 2025 merit cycle</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm">⬇ Download PDF</button>
+      </div>
+    </header>
+    <div class="page-content">
+
+      <!-- Headline metrics -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-icon blue">$</div>
+          <div class="metric-label">Total Merit Budget</div>
+          <div class="metric-value">$1.4M</div>
+          <div class="metric-sub">3.5% of payroll</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon green">↑</div>
+          <div class="metric-label">Avg Merit Increase</div>
+          <div class="metric-value">3.6%</div>
+          <div class="metric-sub">vs. 3.1% last year</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon amber">◎</div>
+          <div class="metric-label">Employees in Cycle</div>
+          <div class="metric-value">142</div>
+          <div class="metric-sub">61% recommendations in</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon red">⚑</div>
+          <div class="metric-label">Exceptions (>10%)</div>
+          <div class="metric-value">3</div>
+          <div class="metric-sub">Require approval</div>
+        </div>
+      </div>
+
+      <div class="exec-grid">
+        <!-- Distribution -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Merit Distribution by Department</div>
+          </div>
+          <div class="card-body">
+            <div class="bar-chart">
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Engineering</div>
+                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:82%; background:#2563EB;"></div></div>
+                <div class="bar-chart-val">3.8% avg</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Sales</div>
+                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:91%; background:#7C3AED;"></div></div>
+                <div class="bar-chart-val">5.2% avg</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Product</div>
+                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:70%; background:#0891B2;"></div></div>
+                <div class="bar-chart-val">3.5% avg</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Operations</div>
+                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:55%; background:#059669;"></div></div>
+                <div class="bar-chart-val">2.8% avg</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Finance</div>
+                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:45%; background:#D97706;"></div></div>
+                <div class="bar-chart-val">2.5% avg</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Budget status -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Budget Status</div>
+          </div>
+          <div class="card-body">
+            <div style="text-align:center; padding: 10px 0 20px;">
+              <div style="font-size:42px; font-weight:800; color:var(--green-600);">70%</div>
+              <div style="font-size:13px; color:var(--gray-500); margin-top:4px;">of budget allocated</div>
+            </div>
+            <div class="progress-bar" style="height:12px; margin-bottom:20px;">
+              <div class="progress-fill green" style="width:70%"></div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
+              <div style="display:flex; justify-content:space-between;">
+                <span class="text-muted">Total Budget</span><span class="fw-700">$1,400,000</span>
+              </div>
+              <div style="display:flex; justify-content:space-between;">
+                <span class="text-muted">Allocated</span><span class="fw-700" style="color:var(--green-600);">$980,000</span>
+              </div>
+              <div style="display:flex; justify-content:space-between;">
+                <span class="text-muted">Remaining</span><span class="fw-700">$420,000</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cycle status -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Cycle Progress</div>
+          <div class="card-subtitle">Submission status across all managers</div>
+        </div>
+        <div class="card-body">
+          <div style="display:flex; gap:24px; margin-bottom:16px;">
+            <div style="flex:1; text-align:center;">
+              <div style="font-size:28px; font-weight:800; color:var(--green-600);">11</div>
+              <div style="font-size:12px; color:var(--gray-500);">Submitted</div>
+            </div>
+            <div style="flex:1; text-align:center;">
+              <div style="font-size:28px; font-weight:800; color:var(--amber-600);">4</div>
+              <div style="font-size:12px; color:var(--gray-500);">In Progress</div>
+            </div>
+            <div style="flex:1; text-align:center;">
+              <div style="font-size:28px; font-weight:800; color:var(--gray-400);">3</div>
+              <div style="font-size:12px; color:var(--gray-500);">Not Started</div>
+            </div>
+            <div style="flex:1; text-align:center;">
+              <div style="font-size:28px; font-weight:800; color:var(--red-600);">3</div>
+              <div style="font-size:12px; color:var(--gray-500);">Flagged</div>
+            </div>
+          </div>
+          <div class="progress-bar" style="height:10px;">
+            <div style="height:100%; border-radius:99px; background: linear-gradient(90deg, var(--green-600) 61%, var(--amber-600) 61% 83%, var(--gray-200) 83%);"></div>
+          </div>
+          <div style="font-size:12px; color:var(--gray-500); margin-top:8px; text-align:right;">61% complete — 14 days remaining</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script>
+  const r = localStorage.getItem('mc_role') || 'exec';
+  document.body.setAttribute('data-role', r);
+  document.querySelector('.role-switcher select').value = r;
+</script>
+</body>
+</html>

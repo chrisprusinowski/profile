@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeritCycle — Compensation Planning</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-role="hr">
+
+<div class="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">M</div>
+      <div>
+        <div class="logo-text">MeritCycle</div>
+        <div class="logo-sub">Compensation Planning</div>
+      </div>
+    </div>
+
+    <div class="sidebar-cycle-badge">
+      <div class="cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-status">
+        <span class="status-dot"></span>
+        Open — closes Apr 15, 2025
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Cycle</div>
+      <a href="index.html" class="nav-item active">
+        <span class="nav-icon">⊞</span> Dashboard
+      </a>
+      <a href="merit.html" class="nav-item">
+        <span class="nav-icon">↑</span> Merit Recommendations
+        <span class="nav-badge">7</span>
+      </a>
+      <a href="employees.html" class="nav-item">
+        <span class="nav-icon">◎</span> Employee Roster
+      </a>
+
+      <div class="nav-section-label">Reports</div>
+      <a href="executive.html" class="nav-item">
+        <span class="nav-icon">◈</span> Executive Summary
+      </a>
+
+      <div class="nav-section-label">Admin</div>
+      <a href="admin.html" class="nav-item">
+        <span class="nav-icon">⚙</span> Cycle Settings
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="role-switcher">
+        <label>Viewing as</label>
+        <select onchange="document.body.setAttribute('data-role', this.value)">
+          <option value="hr" selected>HR / Comp Admin</option>
+          <option value="manager">Manager</option>
+          <option value="exec">Executive</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="page-title">Dashboard</div>
+        <div class="page-subtitle">2025 Annual Merit Cycle</div>
+      </div>
+      <div class="topbar-right">
+        <span class="badge badge-green">● Cycle Open</span>
+        <button class="btn btn-secondary btn-sm">Export</button>
+        <button class="btn btn-primary btn-sm">+ New Cycle</button>
+      </div>
+    </header>
+
+    <!-- Page content -->
+    <div class="page-content">
+
+      <!-- Cycle timeline -->
+      <div class="timeline mb-20">
+        <div class="timeline-step done">
+          <div class="timeline-dot">✓</div>
+          <div class="timeline-label">Cycle Open</div>
+        </div>
+        <div class="timeline-step done">
+          <div class="timeline-dot">✓</div>
+          <div class="timeline-label">Manager Input</div>
+        </div>
+        <div class="timeline-step active">
+          <div class="timeline-dot">3</div>
+          <div class="timeline-label">HR Review</div>
+        </div>
+        <div class="timeline-step">
+          <div class="timeline-dot">4</div>
+          <div class="timeline-label">Approvals</div>
+        </div>
+        <div class="timeline-step">
+          <div class="timeline-dot">5</div>
+          <div class="timeline-label">Finalized</div>
+        </div>
+      </div>
+
+      <!-- Key metrics -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-icon blue">$</div>
+          <div class="metric-label">Total Merit Budget</div>
+          <div class="metric-value">$1.4M</div>
+          <div class="metric-sub">3.5% of total payroll</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon green">✓</div>
+          <div class="metric-label">Budget Allocated</div>
+          <div class="metric-value">$980K</div>
+          <div class="metric-sub metric-trend up">▲ 70% of budget used</div>
+          <div class="progress-bar mt-4">
+            <div class="progress-fill green" style="width:70%"></div>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon amber">◷</div>
+          <div class="metric-label">Managers Submitted</div>
+          <div class="metric-value">11 / 18</div>
+          <div class="metric-sub">7 still pending</div>
+          <div class="progress-bar mt-4">
+            <div class="progress-fill amber" style="width:61%"></div>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon blue">◎</div>
+          <div class="metric-label">Employees in Cycle</div>
+          <div class="metric-value">142</div>
+          <div class="metric-sub">Across 5 departments</div>
+        </div>
+      </div>
+
+      <!-- Two-column grid -->
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
+
+        <!-- Manager completion -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Manager Completion</div>
+              <div class="card-subtitle">Who has submitted recommendations</div>
+            </div>
+            <button class="btn btn-ghost btn-sm">Send Reminder</button>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Manager</th>
+                  <th>Dept</th>
+                  <th>Reports</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="employee-cell"><div class="avatar" style="background:#4F46E5">JR</div><div class="employee-name">Jamie Rivera</div></div></td>
+                  <td class="text-muted">Engineering</td>
+                  <td class="numeric">8</td>
+                  <td><span class="badge badge-green">Submitted</span></td>
+                </tr>
+                <tr>
+                  <td><div class="employee-cell"><div class="avatar" style="background:#0891B2">SC</div><div class="employee-name">Sam Chen</div></div></td>
+                  <td class="text-muted">Product</td>
+                  <td class="numeric">5</td>
+                  <td><span class="badge badge-green">Submitted</span></td>
+                </tr>
+                <tr>
+                  <td><div class="employee-cell"><div class="avatar" style="background:#059669">AK</div><div class="employee-name">Aisha Kofi</div></div></td>
+                  <td class="text-muted">Sales</td>
+                  <td class="numeric">12</td>
+                  <td><span class="badge badge-amber">In Progress</span></td>
+                </tr>
+                <tr>
+                  <td><div class="employee-cell"><div class="avatar" style="background:#DC2626">MP</div><div class="employee-name">Marcus Park</div></div></td>
+                  <td class="text-muted">Finance</td>
+                  <td class="numeric">4</td>
+                  <td><span class="badge badge-gray">Not Started</span></td>
+                </tr>
+                <tr>
+                  <td><div class="employee-cell"><div class="avatar" style="background:#7C3AED">LP</div><div class="employee-name">Laura Patel</div></div></td>
+                  <td class="text-muted">Operations</td>
+                  <td class="numeric">9</td>
+                  <td><span class="badge badge-gray">Not Started</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Budget by department -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Budget by Department</div>
+              <div class="card-subtitle">Allocated vs. approved budget</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="bar-chart">
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Engineering</div>
+                <div class="bar-chart-bar-wrap">
+                  <div class="bar-chart-bar" style="width:82%; background:#2563EB;"></div>
+                </div>
+                <div class="bar-chart-val">$412K</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Sales</div>
+                <div class="bar-chart-bar-wrap">
+                  <div class="bar-chart-bar" style="width:68%; background:#7C3AED;"></div>
+                </div>
+                <div class="bar-chart-val">$265K</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Product</div>
+                <div class="bar-chart-bar-wrap">
+                  <div class="bar-chart-bar" style="width:54%; background:#0891B2;"></div>
+                </div>
+                <div class="bar-chart-val">$178K</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Operations</div>
+                <div class="bar-chart-bar-wrap">
+                  <div class="bar-chart-bar" style="width:41%; background:#059669;"></div>
+                </div>
+                <div class="bar-chart-val">$94K</div>
+              </div>
+              <div class="bar-chart-row">
+                <div class="bar-chart-label">Finance</div>
+                <div class="bar-chart-bar-wrap">
+                  <div class="bar-chart-bar" style="width:28%; background:#D97706;"></div>
+                </div>
+                <div class="bar-chart-val">$31K</div>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div style="display:flex; justify-content:space-between; font-size:13px;">
+              <span class="text-muted">Total allocated</span>
+              <span class="fw-700">$980K of $1.4M</span>
+            </div>
+            <div class="progress-bar mt-8">
+              <div class="progress-fill blue" style="width:70%"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Action items -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Action Items</div>
+            <div class="card-subtitle">Things that need attention before the cycle closes</div>
+          </div>
+        </div>
+        <div class="card-body" style="display:flex; flex-direction:column; gap:10px;">
+          <div class="alert alert-amber">
+            <div class="alert-icon">⚠</div>
+            <div>
+              <strong>7 managers have not started</strong> — the cycle closes in 14 days.
+              <a href="#" style="color:inherit; text-decoration:underline; margin-left:6px;">Send reminder →</a>
+            </div>
+          </div>
+          <div class="alert alert-blue">
+            <div class="alert-icon">ℹ</div>
+            <div>
+              <strong>3 merit increases exceed the 10% guideline</strong> and require additional approval.
+              <a href="merit.html" style="color:inherit; text-decoration:underline; margin-left:6px;">Review →</a>
+            </div>
+          </div>
+          <div class="alert alert-green">
+            <div class="alert-icon">✓</div>
+            <div>
+              <strong>Engineering and Product are on track</strong> — both departments are within budget.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /page-content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<div id="toast"></div>
+
+<script>
+  // Persist role across pages
+  const savedRole = localStorage.getItem('mc_role') || 'hr';
+  document.body.setAttribute('data-role', savedRole);
+  document.querySelector('.role-switcher select').value = savedRole;
+
+  document.querySelector('.role-switcher select').addEventListener('change', function() {
+    const role = this.value;
+    localStorage.setItem('mc_role', role);
+    document.body.setAttribute('data-role', role);
+  });
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+</script>
+</body>
+</html>

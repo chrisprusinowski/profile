@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee Roster — MeritCycle</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-role="hr">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">M</div>
+      <div><div class="logo-text">MeritCycle</div><div class="logo-sub">Compensation Planning</div></div>
+    </div>
+    <div class="sidebar-cycle-badge">
+      <div class="cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-status"><span class="status-dot"></span> Open — closes Apr 15, 2025</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Cycle</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge">7</span></a>
+      <a href="employees.html" class="nav-item active"><span class="nav-icon">◎</span> Employee Roster</a>
+      <div class="nav-section-label">Reports</div>
+      <a href="executive.html" class="nav-item"><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label">Admin</div>
+      <a href="admin.html" class="nav-item"><span class="nav-icon">⚙</span> Cycle Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="role-switcher">
+        <label>Viewing as</label>
+        <select onchange="localStorage.setItem('mc_role',this.value); document.body.setAttribute('data-role',this.value)">
+          <option value="hr">HR / Comp Admin</option>
+          <option value="manager">Manager</option>
+          <option value="exec">Executive</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="page-title">Employee Roster</div>
+        <div class="page-subtitle">142 employees in cycle</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm">⬇ Export</button>
+        <button class="btn btn-primary btn-sm">+ Add Employee</button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="alert alert-blue" style="margin-bottom:24px;">
+        <div class="alert-icon">ℹ</div>
+        <div>Employee Roster is coming soon. This page will show full headcount, job levels, comp bands, and eligibility rules for the active cycle.</div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Coming in next release</div>
+        </div>
+        <div class="card-body">
+          <ul style="list-style:none; display:flex; flex-direction:column; gap:12px;">
+            <li>✦ &nbsp;Full employee list with current salary, job level, and comp band</li>
+            <li>✦ &nbsp;Eligibility flags (new hires, PIPs, recent promotions)</li>
+            <li>✦ &nbsp;Department and manager hierarchy view</li>
+            <li>✦ &nbsp;Bulk import via CSV</li>
+            <li>✦ &nbsp;HRIS integration (Workday, BambooHR, Rippling)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const r = localStorage.getItem('mc_role') || 'hr';
+  document.body.setAttribute('data-role', r);
+  document.querySelector('.role-switcher select').value = r;
+</script>
+</body>
+</html>
