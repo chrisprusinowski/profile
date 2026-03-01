@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Merit Recommendations — MeritCycle</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-role="hr">
+
+<div class="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">M</div>
+      <div>
+        <div class="logo-text">MeritCycle</div>
+        <div class="logo-sub">Compensation Planning</div>
+      </div>
+    </div>
+    <div class="sidebar-cycle-badge">
+      <div class="cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-status"><span class="status-dot"></span> Open — closes Apr 15, 2025</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Cycle</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="merit.html" class="nav-item active"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge">7</span></a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
+      <div class="nav-section-label">Reports</div>
+      <a href="executive.html" class="nav-item"><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label">Admin</div>
+      <a href="admin.html" class="nav-item"><span class="nav-icon">⚙</span> Cycle Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="role-switcher">
+        <label>Viewing as</label>
+        <select onchange="switchRole(this.value)">
+          <option value="hr">HR / Comp Admin</option>
+          <option value="manager">Manager</option>
+          <option value="exec">Executive</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="page-title">Merit Recommendations</div>
+        <div class="page-subtitle">Review and edit merit increases for all employees</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm" onclick="showToast('Exported to CSV')">⬇ Export</button>
+        <button class="btn btn-primary btn-sm" onclick="submitAll()">Submit All</button>
+      </div>
+    </header>
+
+    <div class="page-content">
+
+      <!-- Budget tracker -->
+      <div class="budget-tracker">
+        <div class="budget-tracker-header">
+          <div class="budget-tracker-title">Budget Tracker</div>
+          <span id="budget-status" class="badge badge-green">On Track</span>
+        </div>
+        <div class="budget-grid">
+          <div class="budget-item">
+            <div class="budget-item-label">Total Budget</div>
+            <div class="budget-item-value">$1,400,000</div>
+          </div>
+          <div class="budget-item">
+            <div class="budget-item-label">Allocated</div>
+            <div class="budget-item-value" id="allocated-val">$0</div>
+          </div>
+          <div class="budget-item">
+            <div class="budget-item-label">Remaining</div>
+            <div class="budget-item-value" id="remaining-val">$0</div>
+          </div>
+          <div class="budget-item">
+            <div class="budget-item-label">Avg Merit %</div>
+            <div class="budget-item-value" id="avg-pct">0.0%</div>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill green" id="budget-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-box">
+          <span class="search-icon">⌕</span>
+          <input type="text" placeholder="Search employees…" oninput="filterTable(this.value)" />
+        </div>
+        <select class="filter-select" onchange="filterDept(this.value)">
+          <option value="">All Departments</option>
+          <option>Engineering</option>
+          <option>Product</option>
+          <option>Sales</option>
+          <option>Finance</option>
+          <option>Operations</option>
+        </select>
+        <select class="filter-select" onchange="filterStatus(this.value)">
+          <option value="">All Statuses</option>
+          <option>Draft</option>
+          <option>Submitted</option>
+          <option>Approved</option>
+          <option>Flagged</option>
+        </select>
+        <div style="margin-left:auto; font-size:13px; color:var(--gray-500);" id="row-count"></div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table class="data-table" id="merit-table">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Department</th>
+              <th class="numeric">Current Salary</th>
+              <th class="numeric">Merit %</th>
+              <th class="numeric">Proposed Salary</th>
+              <th>Performance</th>
+              <th>Notes</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="merit-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Employee detail modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-name">Employee Detail</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Current Salary</label>
+          <input class="form-input" id="modal-salary" readonly />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Merit Increase %</label>
+          <input class="form-input" id="modal-pct" type="number" step="0.1" min="0" max="25" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Performance Rating</label>
+        <select class="form-select" id="modal-rating">
+          <option>Exceptional</option>
+          <option>Exceeds Expectations</option>
+          <option>Meets Expectations</option>
+          <option>Needs Improvement</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Justification / Notes</label>
+        <textarea class="form-textarea" id="modal-notes" placeholder="Add context for this recommendation…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveModal()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BUDGET = 1400000;
+const COLORS = ['#4F46E5','#0891B2','#059669','#D97706','#DC2626','#7C3AED','#0D9488','#EA580C'];
+
+const EMPLOYEES = [
+  { id:1,  name:'Alex Morgan',    title:'Sr. Software Engineer',    dept:'Engineering', salary:145000, pct:4.0, rating:'Exceeds Expectations', notes:'', status:'Submitted', initials:'AM' },
+  { id:2,  name:'Brianna Scott',  title:'Product Manager',          dept:'Product',     salary:130000, pct:3.5, rating:'Meets Expectations',   notes:'', status:'Submitted', initials:'BS' },
+  { id:3,  name:'Carlos Vega',    title:'Account Executive',        dept:'Sales',       salary:95000,  pct:5.0, rating:'Exceptional',          notes:'Top performer Q4', status:'Submitted', initials:'CV' },
+  { id:4,  name:'Diana Lee',      title:'Financial Analyst',        dept:'Finance',     salary:88000,  pct:0.0, rating:'Meets Expectations',   notes:'', status:'Draft', initials:'DL' },
+  { id:5,  name:'Ethan Brooks',   title:'DevOps Engineer',          dept:'Engineering', salary:125000, pct:3.0, rating:'Meets Expectations',   notes:'', status:'Submitted', initials:'EB' },
+  { id:6,  name:'Fatima Hassan',  title:'UX Designer',              dept:'Product',     salary:110000, pct:4.5, rating:'Exceeds Expectations', notes:'Led design system overhaul', status:'Draft', initials:'FH' },
+  { id:7,  name:'George Kim',     title:'Operations Manager',       dept:'Operations',  salary:105000, pct:0.0, rating:'Meets Expectations',   notes:'', status:'Draft', initials:'GK' },
+  { id:8,  name:'Hana Patel',     title:'Software Engineer',        dept:'Engineering', salary:115000, pct:3.5, rating:'Meets Expectations',   notes:'', status:'Submitted', initials:'HP' },
+  { id:9,  name:'Ivan Torres',    title:'Sales Manager',            dept:'Sales',       salary:120000, pct:11.0,rating:'Exceptional',          notes:'Exceeded quota by 40%', status:'Flagged', initials:'IT' },
+  { id:10, name:'Jess Wu',        title:'Sr. Product Manager',      dept:'Product',     salary:140000, pct:3.0, rating:'Meets Expectations',   notes:'', status:'Submitted', initials:'JW' },
+  { id:11, name:'Kevin Brown',    title:'Data Engineer',            dept:'Engineering', salary:118000, pct:4.0, rating:'Exceeds Expectations', notes:'', status:'Submitted', initials:'KB' },
+  { id:12, name:'Lucia Reyes',    title:'Controller',               dept:'Finance',     salary:155000, pct:2.5, rating:'Meets Expectations',   notes:'', status:'Draft', initials:'LR' },
+  { id:13, name:'Marcus James',   title:'Staff Engineer',           dept:'Engineering', salary:175000, pct:3.0, rating:'Exceeds Expectations', notes:'', status:'Submitted', initials:'MJ' },
+  { id:14, name:'Nora Singh',     title:'Operations Analyst',       dept:'Operations',  salary:82000,  pct:3.5, rating:'Meets Expectations',   notes:'', status:'Draft', initials:'NS' },
+  { id:15, name:'Omar Ellis',     title:'Enterprise AE',            dept:'Sales',       salary:110000, pct:12.0,rating:'Exceptional',          notes:'New logo acquisition', status:'Flagged', initials:'OE' },
+];
+
+let filtered = [...EMPLOYEES];
+let activeFilters = { search: '', dept: '', status: '' };
+let editingId = null;
+
+function fmt(n) {
+  return '$' + Math.round(n).toLocaleString();
+}
+
+function statusBadge(s) {
+  const map = { Draft:'badge-gray', Submitted:'badge-blue', Approved:'badge-green', Flagged:'badge-amber' };
+  return `<span class="badge ${map[s] || 'badge-gray'}">${s}</span>`;
+}
+
+function ratingBadge(r) {
+  const map = { Exceptional:'badge-green', 'Exceeds Expectations':'badge-blue', 'Meets Expectations':'badge-gray', 'Needs Improvement':'badge-red' };
+  return `<span class="badge ${map[r] || 'badge-gray'}" style="font-size:11px">${r}</span>`;
+}
+
+function avatarColor(id) { return COLORS[(id - 1) % COLORS.length]; }
+
+function renderTable() {
+  const tbody = document.getElementById('merit-tbody');
+  tbody.innerHTML = '';
+  filtered.forEach(e => {
+    const proposed = e.salary * (1 + e.pct / 100);
+    const flagged  = e.pct > 10;
+    const tr = document.createElement('tr');
+    if (flagged) tr.style.background = 'var(--amber-50)';
+    tr.innerHTML = `
+      <td>
+        <div class="employee-cell">
+          <div class="avatar" style="background:${avatarColor(e.id)}">${e.initials}</div>
+          <div>
+            <div class="employee-name">${e.name}</div>
+            <div class="employee-title">${e.title}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="chip">${e.dept}</span></td>
+      <td class="numeric">${fmt(e.salary)}</td>
+      <td class="editable-cell">
+        <input type="number" step="0.1" min="0" max="25" value="${e.pct}"
+          style="width:72px; text-align:right;"
+          onchange="updatePct(${e.id}, parseFloat(this.value))"
+          ${e.status === 'Approved' ? 'disabled' : ''} />
+        <span style="font-size:12px; color:var(--gray-400); margin-left:2px;">%</span>
+        ${flagged ? '<span title="Exceeds 10% guideline" style="color:var(--amber-600); margin-left:4px;">⚠</span>' : ''}
+      </td>
+      <td class="numeric fw-700">${fmt(proposed)}</td>
+      <td>${ratingBadge(e.rating)}</td>
+      <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--gray-500); font-size:12.5px;">${e.notes || '<span style="color:var(--gray-300)">—</span>'}</td>
+      <td class="actions">
+        ${statusBadge(e.status)}
+        <button class="btn btn-ghost btn-sm" style="margin-left:4px;" onclick="openModal(${e.id})">Edit</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('row-count').textContent = `${filtered.length} employees`;
+  recalcBudget();
+}
+
+function recalcBudget() {
+  const total = EMPLOYEES.reduce((sum, e) => sum + (e.salary * e.pct / 100), 0);
+  const pct   = total / BUDGET;
+  const avg   = EMPLOYEES.reduce((s, e) => s + e.pct, 0) / EMPLOYEES.length;
+
+  document.getElementById('allocated-val').textContent = fmt(total);
+  document.getElementById('remaining-val').textContent = fmt(BUDGET - total);
+  document.getElementById('avg-pct').textContent = avg.toFixed(1) + '%';
+
+  const bar = document.getElementById('budget-bar');
+  bar.style.width = Math.min(pct * 100, 100) + '%';
+  bar.className = 'progress-fill ' + (pct > 1 ? 'red' : pct > .85 ? 'amber' : 'green');
+
+  const badge = document.getElementById('budget-status');
+  if (pct > 1) {
+    badge.className = 'badge badge-red';
+    badge.textContent = 'Over Budget';
+  } else if (pct > .85) {
+    badge.className = 'badge badge-amber';
+    badge.textContent = 'Near Limit';
+  } else {
+    badge.className = 'badge badge-green';
+    badge.textContent = 'On Track';
+  }
+}
+
+function updatePct(id, val) {
+  const e = EMPLOYEES.find(x => x.id === id);
+  if (!e) return;
+  e.pct = isNaN(val) ? 0 : Math.max(0, Math.min(25, val));
+  if (e.pct > 10) e.status = 'Flagged';
+  applyFilters();
+}
+
+function filterTable(val) { activeFilters.search = val.toLowerCase(); applyFilters(); }
+function filterDept(val)  { activeFilters.dept   = val;               applyFilters(); }
+function filterStatus(val){ activeFilters.status  = val;               applyFilters(); }
+
+function applyFilters() {
+  filtered = EMPLOYEES.filter(e => {
+    const matchSearch = !activeFilters.search ||
+      e.name.toLowerCase().includes(activeFilters.search) ||
+      e.title.toLowerCase().includes(activeFilters.search);
+    const matchDept   = !activeFilters.dept   || e.dept   === activeFilters.dept;
+    const matchStatus = !activeFilters.status || e.status === activeFilters.status;
+    return matchSearch && matchDept && matchStatus;
+  });
+  renderTable();
+}
+
+function openModal(id) {
+  editingId = id;
+  const e = EMPLOYEES.find(x => x.id === id);
+  document.getElementById('modal-name').textContent = e.name;
+  document.getElementById('modal-salary').value = fmt(e.salary);
+  document.getElementById('modal-pct').value = e.pct;
+  document.getElementById('modal-rating').value = e.rating;
+  document.getElementById('modal-notes').value = e.notes;
+  document.getElementById('detail-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('detail-modal').classList.remove('open');
+  editingId = null;
+}
+
+function saveModal() {
+  const e = EMPLOYEES.find(x => x.id === editingId);
+  const pct  = parseFloat(document.getElementById('modal-pct').value) || 0;
+  e.pct      = Math.max(0, Math.min(25, pct));
+  e.rating   = document.getElementById('modal-rating').value;
+  e.notes    = document.getElementById('modal-notes').value;
+  if (e.status === 'Draft') e.status = 'Submitted';
+  if (e.pct > 10) e.status = 'Flagged';
+  closeModal();
+  applyFilters();
+  showToast('Saved changes for ' + e.name);
+}
+
+function submitAll() {
+  EMPLOYEES.forEach(e => { if (e.status === 'Draft') e.status = 'Submitted'; });
+  applyFilters();
+  showToast('All draft recommendations submitted');
+}
+
+function switchRole(role) {
+  localStorage.setItem('mc_role', role);
+  document.body.setAttribute('data-role', role);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Close modal on overlay click
+document.getElementById('detail-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Init
+const savedRole = localStorage.getItem('mc_role') || 'hr';
+document.body.setAttribute('data-role', savedRole);
+document.querySelector('.role-switcher select').value = savedRole;
+renderTable();
+</script>
+</body>
+</html>

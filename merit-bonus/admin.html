@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cycle Settings — MeritCycle</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-role="hr">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">M</div>
+      <div><div class="logo-text">MeritCycle</div><div class="logo-sub">Compensation Planning</div></div>
+    </div>
+    <div class="sidebar-cycle-badge">
+      <div class="cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-status"><span class="status-dot"></span> Open — closes Apr 15, 2025</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Cycle</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge">7</span></a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
+      <div class="nav-section-label">Reports</div>
+      <a href="executive.html" class="nav-item"><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label">Admin</div>
+      <a href="admin.html" class="nav-item active"><span class="nav-icon">⚙</span> Cycle Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="role-switcher">
+        <label>Viewing as</label>
+        <select onchange="localStorage.setItem('mc_role',this.value); document.body.setAttribute('data-role',this.value)">
+          <option value="hr" selected>HR / Comp Admin</option>
+          <option value="manager">Manager</option>
+          <option value="exec">Executive</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="page-title">Cycle Settings</div>
+        <div class="page-subtitle">Configure the active merit cycle</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm">Discard</button>
+        <button class="btn btn-primary btn-sm" onclick="showToast('Settings saved')">Save Changes</button>
+      </div>
+    </header>
+    <div class="page-content">
+
+      <!-- Cycle details -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <div class="card-title">Cycle Details</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Cycle Name</label>
+              <input class="form-input" value="2025 Annual Merit Cycle" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cycle Type</label>
+              <select class="form-select">
+                <option selected>Merit (Salary Increase)</option>
+                <option>Bonus</option>
+                <option>Equity Refresh</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Open Date</label>
+              <input class="form-input" type="date" value="2025-03-01" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Close Date</label>
+              <input class="form-input" type="date" value="2025-04-15" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Effective Date</label>
+            <input class="form-input" type="date" value="2025-07-01" style="max-width:240px;" />
+            <div class="form-hint">The date when approved merit increases take effect in payroll.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Budget -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <div class="card-title">Budget Configuration</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Total Payroll</label>
+              <input class="form-input" value="$40,000,000" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Merit Budget %</label>
+              <input class="form-input" type="number" step="0.1" value="3.5" />
+              <div class="form-hint">Auto-calculates to $1,400,000 total budget.</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Merit Increase Guidelines</label>
+            <div class="form-row">
+              <div>
+                <label class="form-label" style="font-weight:400; font-size:12px;">Minimum %</label>
+                <input class="form-input" type="number" value="0" />
+              </div>
+              <div>
+                <label class="form-label" style="font-weight:400; font-size:12px;">Maximum % (before approval required)</label>
+                <input class="form-input" type="number" value="10" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Approval workflow -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <div class="card-title">Approval Workflow</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Increases above guideline require approval from</label>
+            <select class="form-select" style="max-width:320px;">
+              <option>HR Admin only</option>
+              <option selected>HR Admin + Finance</option>
+              <option>HR Admin + Finance + CEO</option>
+            </select>
+          </div>
+          <div class="alert alert-blue mt-16">
+            <div class="alert-icon">ℹ</div>
+            <div>Full approval chain configuration (multi-level, conditional routing) is coming in the next release.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Eligible employees -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Eligibility Rules</div>
+        </div>
+        <div class="card-body">
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
+              <input type="checkbox" checked /> Exclude employees hired within last 90 days
+            </label>
+            <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
+              <input type="checkbox" checked /> Exclude employees on a Performance Improvement Plan (PIP)
+            </label>
+            <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
+              <input type="checkbox" /> Exclude employees promoted within the last 6 months
+            </label>
+            <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
+              <input type="checkbox" /> Exclude part-time employees
+            </label>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+  const r = localStorage.getItem('mc_role') || 'hr';
+  document.body.setAttribute('data-role', r);
+  document.querySelector('.role-switcher select').value = r;
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+</script>
+</body>
+</html>
