@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Import Employees — MeritCycle</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body data-role="hr">
+
+<div class="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">M</div>
+      <div>
+        <div class="logo-text">MeritCycle</div>
+        <div class="logo-sub">Compensation Planning</div>
+      </div>
+    </div>
+    <div class="sidebar-cycle-badge">
+      <div class="cycle-name" id="sb-cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-status"><span class="status-dot"></span> Open</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Cycle</div>
+      <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations</a>
+      <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
+      <div class="nav-section-label">Data</div>
+      <a href="import.html" class="nav-item active"><span class="nav-icon">⬆</span> Import CSV</a>
+      <div class="nav-section-label">Reports</div>
+      <a href="executive.html" class="nav-item"><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label">Admin</div>
+      <a href="admin.html" class="nav-item"><span class="nav-icon">⚙</span> Cycle Settings</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="role-switcher">
+        <label>Viewing as</label>
+        <select onchange="switchRole(this.value)">
+          <option value="hr" selected>HR / Comp Admin</option>
+          <option value="manager">Manager</option>
+          <option value="exec">Executive</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="page-title">Import Employees</div>
+        <div class="page-subtitle">Upload a CSV file to populate the merit cycle roster</div>
+      </div>
+      <div class="topbar-right" id="existing-badge" style="display:none;">
+        <span class="badge badge-amber" id="existing-count-badge"></span>
+      </div>
+    </header>
+
+    <div class="page-content">
+
+      <!-- Step indicator -->
+      <div class="step-indicator">
+        <div class="step active" id="si-1">
+          <div class="step-num">1</div>
+          <div class="step-label">Upload File</div>
+        </div>
+        <div class="step-connector" id="conn-1"></div>
+        <div class="step" id="si-2">
+          <div class="step-num">2</div>
+          <div class="step-label">Map Columns</div>
+        </div>
+        <div class="step-connector" id="conn-2"></div>
+        <div class="step" id="si-3">
+          <div class="step-num">3</div>
+          <div class="step-label">Preview &amp; Import</div>
+        </div>
+      </div>
+
+      <!-- ── Step 1: Upload ─────────────────────────────────── -->
+      <div id="step-1" class="import-step">
+        <div class="card">
+          <div class="card-body">
+
+            <div class="dropzone" id="dropzone">
+              <div class="dropzone-icon">↑</div>
+              <div class="dropzone-title">Drop your CSV file here</div>
+              <div class="dropzone-sub">
+                or <label for="file-input" class="link">click to browse</label>
+              </div>
+              <input type="file" id="file-input" accept=".csv,.txt" style="display:none" />
+            </div>
+
+            <div class="mt-20">
+              <div style="font-size:13px; font-weight:600; color:var(--gray-600); margin-bottom:8px;">
+                Expected CSV format
+              </div>
+              <div class="code-sample">Employee Name,Department,Job Title,Base Salary,Manager,Email,Hire Date
+Alex Morgan,Engineering,Sr. Software Engineer,145000,Jamie Rivera,alex@company.com,2021-03-15
+Brianna Scott,Product,Product Manager,130000,Sam Chen,brianna@company.com,2020-07-01
+Carlos Vega,Sales,Account Executive,95000,Aisha Kofi,carlos@company.com,2022-01-10</div>
+            </div>
+
+            <div class="mt-16" style="display:flex; gap:24px; flex-wrap:wrap;">
+              <div>
+                <div style="font-size:12px; font-weight:700; color:var(--gray-600); margin-bottom:4px;">REQUIRED</div>
+                <div style="font-size:13px; color:var(--gray-700);">Name (or First + Last) &nbsp;·&nbsp; Current Salary</div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; color:var(--gray-400); margin-bottom:4px;">OPTIONAL</div>
+                <div style="font-size:13px; color:var(--gray-500);">Department · Job Title · Manager · Email · Employee ID · Hire Date · Performance Rating</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Step 2: Map Columns ────────────────────────────── -->
+      <div id="step-2" class="import-step" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Map Columns</div>
+              <div class="card-subtitle" id="file-info">—</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="goToStep(1)">← Re-upload</button>
+          </div>
+          <div class="card-body" style="padding:0;">
+            <div class="mapping-fields" id="mapping-fields">
+              <!-- populated by JS -->
+            </div>
+          </div>
+          <div class="card-footer">
+            <button class="btn btn-secondary" onclick="goToStep(1)">Back</button>
+            <button class="btn btn-primary" onclick="buildPreview()">Preview Import →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Step 3: Preview & Import ───────────────────────── -->
+      <div id="step-3" class="import-step" style="display:none">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="preview-title">Preview</div>
+              <div class="card-subtitle" id="preview-subtitle">—</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="goToStep(2)">← Edit Mapping</button>
+          </div>
+
+          <div id="preview-warnings" style="padding:0 20px; display:none;"></div>
+
+          <div style="overflow-x:auto;">
+            <table class="data-table" id="preview-table">
+              <thead><tr id="preview-thead-row"></tr></thead>
+              <tbody id="preview-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="card-footer">
+            <button class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+            <div style="display:flex; align-items:center; gap:16px;">
+              <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; color:var(--gray-600);">
+                <input type="checkbox" id="clear-recs-cb" checked />
+                Clear existing recommendations on import
+              </label>
+              <button class="btn btn-primary" id="import-btn" onclick="doImport()">Import Employees →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /page-content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<div id="toast"></div>
+
+<script src="js/store.js"></script>
+<script src="js/csv.js"></script>
+<script>
+
+// ── State ────────────────────────────────────────────────────────
+let parsedCSV    = null;   // { headers, rows }
+let curMapping   = {};     // { fieldKey: 'CSV Column Header' }
+let importReady  = [];     // employee objects ready to import
+
+// ── Field definitions ────────────────────────────────────────────
+const FIELD_DEFS = [
+  { key: 'fullName',   label: 'Full Name',          required: 'name',  hint: 'Or map First Name + Last Name separately below' },
+  { key: 'firstName',  label: 'First Name',         required: false,   hint: 'Alternative to Full Name' },
+  { key: 'lastName',   label: 'Last Name',          required: false,   hint: 'Alternative to Full Name' },
+  { key: 'salary',     label: 'Current Salary',     required: true,    hint: 'Accepts $145,000 or 145000' },
+  { key: 'department', label: 'Department',         required: false,   hint: '' },
+  { key: 'title',      label: 'Job Title',          required: false,   hint: '' },
+  { key: 'manager',    label: 'Manager',            required: false,   hint: '' },
+  { key: 'email',      label: 'Email',              required: false,   hint: '' },
+  { key: 'id',         label: 'Employee ID',        required: false,   hint: 'Used to match records on re-import' },
+  { key: 'hireDate',   label: 'Hire Date',         required: false,   hint: '' },
+  { key: 'rating',     label: 'Performance Rating', required: false,   hint: 'Carries over to recommendations' },
+];
+
+// ── File handling ────────────────────────────────────────────────
+document.getElementById('dropzone').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+document.getElementById('dropzone').addEventListener('dragover', e => {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.add('dragover');
+});
+
+document.getElementById('dropzone').addEventListener('dragleave', () => {
+  document.getElementById('dropzone').classList.remove('dragover');
+});
+
+document.getElementById('dropzone').addEventListener('drop', e => {
+  e.preventDefault();
+  document.getElementById('dropzone').classList.remove('dragover');
+  handleFile(e.dataTransfer.files[0]);
+});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.match(/\.(csv|txt)$/i)) {
+    showToast('Please upload a .csv or .txt file');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    parsedCSV = CSV.parse(e.target.result);
+    if (!parsedCSV.headers.length) {
+      showToast('Could not read file — check that it is a valid CSV');
+      return;
+    }
+    curMapping = CSV.autoDetect(parsedCSV.headers);
+    buildMappingUI();
+    goToStep(2);
+  };
+  reader.readAsText(file);
+}
+
+// ── Step 2: Mapping UI ───────────────────────────────────────────
+function buildMappingUI() {
+  document.getElementById('file-info').textContent =
+    `${parsedCSV.headers.length} columns · ${parsedCSV.rows.length} data rows detected`;
+
+  const firstRow = parsedCSV.rows[0] || {};
+  const container = document.getElementById('mapping-fields');
+  container.innerHTML = '';
+
+  FIELD_DEFS.forEach(field => {
+    const row  = document.createElement('div');
+    row.className = 'mapping-row';
+
+    const reqHtml = field.required === true  ? '<span class="req-label">REQUIRED</span>'
+                  : field.required === 'name' ? '<span class="name-label">NAME</span>'
+                  :                             '<span class="opt-label">OPTIONAL</span>';
+
+    const opts = ['<option value="">— Not mapped —</option>',
+      ...parsedCSV.headers.map(h =>
+        `<option value="${h}" ${curMapping[field.key] === h ? 'selected' : ''}>${h}</option>`)
+    ].join('');
+
+    // Show a sample value from the first row if this column is already mapped
+    const sampleVal = curMapping[field.key] ? firstRow[curMapping[field.key]] || '' : '';
+
+    row.innerHTML = `
+      <div class="mapping-cell mapping-cell-label">
+        ${reqHtml}
+        <span class="mapping-field-name">${field.label}</span>
+        ${field.hint ? `<div class="mapping-hint">${field.hint}</div>` : ''}
+      </div>
+      <div class="mapping-cell">
+        <select data-field="${field.key}" onchange="onMappingChange(this)">
+          ${opts}
+        </select>
+        <div class="mapping-sample" id="sample-${field.key}">${sampleVal ? `e.g. "${sampleVal}"` : ''}</div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function onMappingChange(select) {
+  const field = select.dataset.field;
+  curMapping[field] = select.value || undefined;
+  // Update sample preview
+  const firstRow   = parsedCSV.rows[0] || {};
+  const sampleEl   = document.getElementById(`sample-${field}`);
+  sampleEl.textContent = select.value ? `e.g. "${firstRow[select.value] || ''}"` : '';
+}
+
+function validateMapping() {
+  if (!curMapping.fullName && !curMapping.firstName && !curMapping.lastName) {
+    showToast('Map at least one name field (Full Name, or First + Last Name)');
+    return false;
+  }
+  if (!curMapping.salary) {
+    showToast('Current Salary is required — please map that column');
+    return false;
+  }
+  return true;
+}
+
+// ── Step 3: Preview ──────────────────────────────────────────────
+function buildPreview() {
+  if (!validateMapping()) return;
+
+  const { employees, warnings } = CSV.toEmployees(parsedCSV.rows, curMapping);
+  importReady = employees;
+
+  // Warnings
+  const warnEl = document.getElementById('preview-warnings');
+  if (warnings.length) {
+    warnEl.style.display = 'block';
+    warnEl.innerHTML = `
+      <div class="alert alert-amber" style="margin:16px 20px 0;">
+        <div class="alert-icon">⚠</div>
+        <div>
+          <strong>${warnings.length} warning${warnings.length !== 1 ? 's' : ''}:</strong>
+          <ul style="margin-top:6px; padding-left:16px; display:flex; flex-direction:column; gap:2px;">
+            ${warnings.map(w => `<li style="font-size:13px;">${w}</li>`).join('')}
+          </ul>
+        </div>
+      </div>`;
+  } else {
+    warnEl.style.display = 'none';
+  }
+
+  // Headline
+  document.getElementById('preview-title').textContent    = `Preview — ${employees.length} employees`;
+  document.getElementById('preview-subtitle').textContent = `Showing first 10 rows`;
+  document.getElementById('import-btn').textContent       = `Import ${employees.length} Employees →`;
+  document.getElementById('import-btn').disabled = false;
+  document.getElementById('import-btn').className = 'btn btn-primary';
+
+  // Determine which columns to show (only those we actually mapped)
+  const cols = ['name','department','title','salary','manager','email','hireDate']
+    .filter(c => employees.some(e => e[c]));
+
+  const LABELS = {
+    name:'Name', department:'Department', title:'Job Title',
+    salary:'Salary', manager:'Manager', email:'Email', hireDate:'Hire Date',
+  };
+
+  // Header
+  document.getElementById('preview-thead-row').innerHTML =
+    cols.map(c => `<th>${LABELS[c]}</th>`).join('');
+
+  // Body (first 10)
+  const preview = employees.slice(0, 10);
+  document.getElementById('preview-tbody').innerHTML = [
+    ...preview.map(e => `<tr>${cols.map(c => {
+      if (c === 'salary') return `<td class="numeric">$${(e.salary || 0).toLocaleString()}</td>`;
+      return `<td>${e[c] || '<span style="color:var(--gray-300)">—</span>'}</td>`;
+    }).join('')}</tr>`),
+    employees.length > 10
+      ? `<tr><td colspan="${cols.length}" style="text-align:center; color:var(--gray-400); font-style:italic; padding:14px;">
+            … and ${employees.length - 10} more employees
+         </td></tr>`
+      : '',
+  ].join('');
+
+  goToStep(3);
+}
+
+// ── Import ───────────────────────────────────────────────────────
+function doImport() {
+  if (!importReady.length) return;
+
+  if (document.getElementById('clear-recs-cb').checked) {
+    Store.clearEmployees(); // clears both employees + recommendations
+  }
+
+  // If NOT clearing, merge: keep existing employees not in new import
+  if (!document.getElementById('clear-recs-cb').checked) {
+    const existing    = Store.getEmployees();
+    const newIds      = new Set(importReady.map(e => e.id));
+    const keepExisting = existing.filter(e => !newIds.has(e.id));
+    Store.setEmployees([...keepExisting, ...importReady]);
+  } else {
+    Store.setEmployees(importReady);
+  }
+
+  // Seed recommendations from performance rating if mapped
+  if (curMapping.rating) {
+    importReady.forEach(e => {
+      if (e.rating) {
+        const existing = Store.getRecommendation(e.id);
+        if (!existing.rating || existing.rating === 'Meets Expectations') {
+          Store.setRecommendation(e.id, { ...existing, rating: e.rating });
+        }
+      }
+    });
+  }
+
+  const btn = document.getElementById('import-btn');
+  btn.textContent = '✓ Imported!';
+  btn.disabled    = true;
+  btn.className   = 'btn btn-success';
+
+  showToast(`Imported ${importReady.length} employees`);
+  setTimeout(() => { window.location.href = 'merit.html'; }, 1400);
+}
+
+// ── Step navigation ──────────────────────────────────────────────
+function goToStep(n) {
+  [1, 2, 3].forEach(i => {
+    document.getElementById(`step-${i}`).style.display = i === n ? '' : 'none';
+    const ind = document.getElementById(`si-${i}`);
+    ind.className = 'step' + (i === n ? ' active' : i < n ? ' done' : '');
+  });
+  document.getElementById('conn-1').className = 'step-connector' + (n > 1 ? ' done' : '');
+  document.getElementById('conn-2').className = 'step-connector' + (n > 2 ? ' done' : '');
+}
+
+// ── Role + init ──────────────────────────────────────────────────
+function switchRole(role) {
+  localStorage.setItem('mc_role', role);
+  document.body.setAttribute('data-role', role);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+(function init() {
+  const role = localStorage.getItem('mc_role') || 'hr';
+  document.body.setAttribute('data-role', role);
+  document.querySelector('.role-switcher select').value = role;
+
+  // Show existing employee count warning if data already exists
+  const count = Store.getEmployees().length;
+  if (count > 0) {
+    document.getElementById('existing-badge').style.display = 'flex';
+    document.getElementById('existing-count-badge').textContent =
+      `${count} employees already in cycle`;
+  }
+
+  const cycle = Store.getCycle();
+  document.getElementById('sb-cycle-name').textContent = cycle.name || '2025 Annual Merit Cycle';
+})();
+
+</script>
+</body>
+</html>

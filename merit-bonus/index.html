@@ -35,17 +35,19 @@
       </a>
       <a href="merit.html" class="nav-item">
         <span class="nav-icon">↑</span> Merit Recommendations
-        <span class="nav-badge">7</span>
       </a>
       <a href="employees.html" class="nav-item">
         <span class="nav-icon">◎</span> Employee Roster
       </a>
 
+      <div class="nav-section-label">Data</div>
+      <a href="import.html" class="nav-item">
+        <span class="nav-icon">⬆</span> Import CSV
+      </a>
       <div class="nav-section-label">Reports</div>
       <a href="executive.html" class="nav-item">
         <span class="nav-icon">◈</span> Executive Summary
       </a>
-
       <div class="nav-section-label">Admin</div>
       <a href="admin.html" class="nav-item">
         <span class="nav-icon">⚙</span> Cycle Settings
@@ -298,17 +300,14 @@
 
 <div id="toast"></div>
 
+<script src="js/store.js"></script>
 <script>
-  // Persist role across pages
-  const savedRole = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', savedRole);
-  document.querySelector('.role-switcher select').value = savedRole;
-
-  document.querySelector('.role-switcher select').addEventListener('change', function() {
-    const role = this.value;
-    localStorage.setItem('mc_role', role);
-    document.body.setAttribute('data-role', role);
-  });
+  function fmt(n) { return '$' + Math.round(n).toLocaleString(); }
+  function fmtK(n) {
+    if (Math.abs(n) >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1000)    return '$' + Math.round(n / 1000) + 'K';
+    return '$' + Math.round(n);
+  }
 
   function showToast(msg) {
     const t = document.getElementById('toast');
@@ -316,6 +315,80 @@
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3000);
   }
+
+  (function init() {
+    // Role
+    const role = localStorage.getItem('mc_role') || 'hr';
+    document.body.setAttribute('data-role', role);
+    document.querySelector('.role-switcher select').value = role;
+
+    document.querySelector('.role-switcher select').addEventListener('change', function() {
+      localStorage.setItem('mc_role', this.value);
+      document.body.setAttribute('data-role', this.value);
+    });
+
+    if (!Store.hasEmployees()) {
+      // Show import prompt banner at the top of the page
+      const content = document.querySelector('.page-content');
+      const banner  = document.createElement('div');
+      banner.className = 'alert alert-blue';
+      banner.style.cssText = 'margin-bottom:20px; align-items:center;';
+      banner.innerHTML = `
+        <div class="alert-icon" style="font-size:20px;">⬆</div>
+        <div style="flex:1;">
+          <strong>No employees imported yet.</strong>
+          Upload a CSV to populate the merit cycle with real employee and salary data.
+        </div>
+        <a href="import.html" class="btn btn-primary btn-sm" style="margin-left:12px; white-space:nowrap;">Import CSV →</a>`;
+      content.insertBefore(banner, content.firstChild);
+      return; // Leave metric cards as-is (showing demo data)
+    }
+
+    // ── Live metrics from store ────────────────────────────────
+    const employees = Store.getEmployees();
+    const cycle     = Store.getCycle();
+    const summary   = Store.getBudgetSummary();
+    const counts    = Store.getStatusCounts();
+    const depts     = Store.getDepartments();
+
+    const total     = employees.length;
+    const submitted = counts.Submitted + counts.Approved + counts.Flagged;
+    const flagged   = counts.Flagged;
+
+    // Metric cards — update values
+    const cards = document.querySelectorAll('.metric-card');
+
+    // Card 1: Total Merit Budget
+    cards[0].querySelector('.metric-value').textContent = fmtK(summary.budget);
+    cards[0].querySelector('.metric-sub').textContent   = `${cycle.budgetPct || 3.5}% of total payroll`;
+
+    // Card 2: Budget Allocated
+    const pctUsed = summary.pctUsed;
+    cards[1].querySelector('.metric-value').textContent = fmtK(summary.allocated);
+    cards[1].querySelector('.metric-sub').textContent   = `${Math.round(pctUsed * 100)}% of budget used`;
+    const fill2 = cards[1].querySelector('.progress-fill');
+    if (fill2) fill2.style.width = Math.min(pctUsed * 100, 100) + '%';
+
+    // Card 3: Submitted count
+    const pctDone = total ? submitted / total : 0;
+    cards[2].querySelector('.metric-value').textContent = `${submitted} / ${total}`;
+    cards[2].querySelector('.metric-sub').textContent   = `${total - submitted} still pending`;
+    const fill3 = cards[2].querySelector('.progress-fill');
+    if (fill3) fill3.style.width = Math.round(pctDone * 100) + '%';
+
+    // Card 4: Employees in Cycle
+    cards[3].querySelector('.metric-value').textContent = total;
+    cards[3].querySelector('.metric-sub').textContent   =
+      depts.length ? `Across ${depts.length} department${depts.length !== 1 ? 's' : ''}` : 'No departments mapped';
+
+    // Flagged action-item alert — update dynamically
+    if (flagged > 0) {
+      const flagAlert = document.querySelector('.alert-blue strong');
+      if (flagAlert) {
+        flagAlert.textContent = `${flagged} merit increase${flagged !== 1 ? 's' : ''} exceed the ${cycle.guidelineMax || 10}% guideline`;
+      }
+    }
+  })();
 </script>
 </body>
 </html>
