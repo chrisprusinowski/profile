@@ -1,0 +1,17 @@
+{
+  "name": "profile-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present --parallel",
+    "start": "npm run start --workspaces --if-present --parallel",
+    "build": "npm run build -w @profile/shared && npm run build -w @profile/api && npm run build -w @profile/web",
+    "lint": "npm run lint -w @profile/shared && npm run lint -w @profile/api && npm run lint -w @profile/web",
+    "typecheck": "npm run build -w @profile/shared && npm run typecheck -w @profile/api && npm run typecheck -w @profile/web && npm run typecheck -w @profile/shared",
+    "test": "npm run test -w @profile/shared && npm run test -w @profile/api && npm run test -w @profile/web"
+  }
+}
