@@ -46,7 +46,7 @@
       </div>
       <div class="topbar-right">
         <button class="btn btn-secondary btn-sm">⬇ Export</button>
-        <button class="btn btn-primary btn-sm">+ Add Employee</button>
+        <button id="add-employee-btn" class="btn btn-primary btn-sm">+ Add Employee</button>
       </div>
     </header>
     <div class="page-content">
@@ -94,9 +94,53 @@
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="add-employee-modal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add Employee</div>
+      <button class="modal-close" id="add-employee-close" aria-label="Close add employee form">✕</button>
+    </div>
+    <form class="modal-body" id="add-employee-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="new-employee-name">Name</label>
+          <input class="form-input" id="new-employee-name" name="name" required placeholder="Jane Smith" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-employee-salary">Salary</label>
+          <input class="form-input" id="new-employee-salary" name="salary" type="number" min="0" step="1" required placeholder="90000" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="new-employee-department">Department</label>
+          <input class="form-input" id="new-employee-department" name="department" placeholder="Engineering" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-employee-title">Title</label>
+          <input class="form-input" id="new-employee-title" name="title" placeholder="Software Engineer" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="new-employee-manager">Manager</label>
+          <input class="form-input" id="new-employee-manager" name="manager" placeholder="Alex Chen" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-employee-hire-date">Hire Date</label>
+          <input class="form-input" id="new-employee-hire-date" name="hireDate" type="date" />
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:0; margin-top:16px;">
+        <button type="button" class="btn btn-secondary" id="add-employee-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Employee</button>
+      </div>
+    </form>
+  </div>
+</div>
 <script src="js/store.js"></script>
 <script>
-  const allEmployees = Store.getEmployees();
+  let allEmployees = Store.getEmployees();
 
   const elems = {
     roleSelect: document.querySelector('.role-switcher select'),
@@ -108,7 +152,52 @@
     tbody: document.getElementById('employee-table-body'),
     empty: document.getElementById('employee-empty'),
     emptyMsg: document.getElementById('empty-state-message'),
+    addEmployeeBtn: document.getElementById('add-employee-btn'),
+    addEmployeeModal: document.getElementById('add-employee-modal'),
+    addEmployeeForm: document.getElementById('add-employee-form'),
+    addEmployeeClose: document.getElementById('add-employee-close'),
+    addEmployeeCancel: document.getElementById('add-employee-cancel'),
   };
+
+  function refreshEmployees() {
+    allEmployees = Store.getEmployees();
+  }
+
+  function openAddEmployeeModal() {
+    elems.addEmployeeForm.reset();
+    elems.addEmployeeModal.style.display = 'flex';
+    document.getElementById('new-employee-name').focus();
+  }
+
+  function closeAddEmployeeModal() {
+    elems.addEmployeeModal.style.display = 'none';
+  }
+
+  function saveEmployeeFromForm(event) {
+    event.preventDefault();
+    const form = new FormData(elems.addEmployeeForm);
+    const name = String(form.get('name') || '').trim();
+    const salary = Number(form.get('salary')) || 0;
+
+    if (!name) return;
+
+    const employees = Store.getEmployees();
+    employees.push({
+      id: `emp-${Date.now()}`,
+      name,
+      salary,
+      department: String(form.get('department') || '').trim(),
+      title: String(form.get('title') || '').trim(),
+      manager: String(form.get('manager') || '').trim(),
+      hireDate: String(form.get('hireDate') || '').trim(),
+    });
+
+    Store.setEmployees(employees);
+    refreshEmployees();
+    renderDepartments();
+    updateView();
+    closeAddEmployeeModal();
+  }
 
   function fmtSalary(value) {
     return `$${(Number(value) || 0).toLocaleString()}`;
@@ -200,6 +289,13 @@
 
     elems.search.addEventListener('input', updateView);
     elems.department.addEventListener('change', updateView);
+    elems.addEmployeeBtn.addEventListener('click', openAddEmployeeModal);
+    elems.addEmployeeClose.addEventListener('click', closeAddEmployeeModal);
+    elems.addEmployeeCancel.addEventListener('click', closeAddEmployeeModal);
+    elems.addEmployeeForm.addEventListener('submit', saveEmployeeFromForm);
+    elems.addEmployeeModal.addEventListener('click', function (event) {
+      if (event.target === elems.addEmployeeModal) closeAddEmployeeModal();
+    });
 
     renderDepartments();
     updateView();
