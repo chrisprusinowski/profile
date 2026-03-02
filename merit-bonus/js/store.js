@@ -25,6 +25,12 @@ const Store = (() => {
     status:       'open',
   };
 
+  const DEFAULT_FINANCE_MODULE = {
+    defaultMeritPct: 3.5,
+    defaultBonusPct: 8,
+    departments: {},
+  };
+
   return {
 
     // ── Employees ───────────────────────────────────────────────
@@ -35,6 +41,66 @@ const Store = (() => {
     // ── Cycle config ────────────────────────────────────────────
     getCycle()        { return get('cycle') || { ...DEFAULT_CYCLE }; },
     setCycle(obj)     { set('cycle', obj); },
+
+
+    // ── Finance module (team makeup based budgets) ─────────────
+    getFinanceModule() {
+      const current = get('financeModule') || {};
+      return {
+        ...DEFAULT_FINANCE_MODULE,
+        ...current,
+        departments: { ...DEFAULT_FINANCE_MODULE.departments, ...(current.departments || {}) },
+      };
+    },
+
+    setFinanceModule(obj) {
+      const merged = {
+        ...DEFAULT_FINANCE_MODULE,
+        ...(obj || {}),
+        departments: { ...(obj?.departments || {}) },
+      };
+      set('financeModule', merged);
+    },
+
+    getTeamBudgetBreakdown() {
+      const employees = get('employees') || [];
+      const finance   = this.getFinanceModule();
+      const byDept    = {};
+
+      employees.forEach(e => {
+        const dept = e.department || 'Unassigned';
+        byDept[dept] = byDept[dept] || { headcount: 0, payroll: 0 };
+        byDept[dept].headcount += 1;
+        byDept[dept].payroll   += Number(e.salary) || 0;
+      });
+
+      const totalPayroll = Object.values(byDept).reduce((sum, d) => sum + d.payroll, 0);
+
+      const rows = Object.entries(byDept)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([department, stats]) => {
+          const cfg = finance.departments[department] || {};
+          const meritPct = Number.isFinite(cfg.meritPct) ? cfg.meritPct : finance.defaultMeritPct;
+          const bonusPct = Number.isFinite(cfg.bonusPct) ? cfg.bonusPct : finance.defaultBonusPct;
+          return {
+            department,
+            headcount: stats.headcount,
+            payroll: stats.payroll,
+            payrollShare: totalPayroll ? stats.payroll / totalPayroll : 0,
+            meritPct,
+            bonusPct,
+            meritBudget: stats.payroll * (meritPct / 100),
+            bonusBudget: stats.payroll * (bonusPct / 100),
+          };
+        });
+
+      return {
+        totalPayroll,
+        totalMeritBudget: rows.reduce((sum, r) => sum + r.meritBudget, 0),
+        totalBonusBudget: rows.reduce((sum, r) => sum + r.bonusBudget, 0),
+        rows,
+      };
+    },
 
     // ── Recommendations (one per employee id) ───────────────────
     getRecommendations() { return get('recommendations') || {}; },

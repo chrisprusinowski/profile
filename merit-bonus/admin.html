@@ -14,7 +14,7 @@
       <div><div class="logo-text">MeritCycle</div><div class="logo-sub">Compensation Planning</div></div>
     </div>
     <div class="sidebar-cycle-badge">
-      <div class="cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-name" id="sb-cycle-name">2025 Annual Merit Cycle</div>
       <div class="cycle-status"><span class="status-dot"></span> Open — closes Apr 15, 2025</div>
     </div>
     <nav class="sidebar-nav">
@@ -46,7 +46,7 @@
       </div>
       <div class="topbar-right">
         <button class="btn btn-secondary btn-sm">Discard</button>
-        <button class="btn btn-primary btn-sm" onclick="showToast('Settings saved')">Save Changes</button>
+        <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>
       </div>
     </header>
     <div class="page-content">
@@ -60,7 +60,7 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Cycle Name</label>
-              <input class="form-input" value="2025 Annual Merit Cycle" />
+              <input class="form-input" id="cycle-name" value="2025 Annual Merit Cycle" />
             </div>
             <div class="form-group">
               <label class="form-label">Cycle Type</label>
@@ -74,16 +74,16 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Open Date</label>
-              <input class="form-input" type="date" value="2025-03-01" />
+              <input class="form-input" id="open-date" type="date" value="2025-03-01" />
             </div>
             <div class="form-group">
               <label class="form-label">Close Date</label>
-              <input class="form-input" type="date" value="2025-04-15" />
+              <input class="form-input" id="close-date" type="date" value="2025-04-15" />
             </div>
           </div>
           <div class="form-group">
             <label class="form-label">Effective Date</label>
-            <input class="form-input" type="date" value="2025-07-01" style="max-width:240px;" />
+            <input class="form-input" id="effective-date" type="date" value="2025-07-01" style="max-width:240px;" />
             <div class="form-hint">The date when approved merit increases take effect in payroll.</div>
           </div>
         </div>
@@ -98,11 +98,11 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Total Payroll</label>
-              <input class="form-input" value="$40,000,000" />
+              <input class="form-input" id="total-payroll" value="$40,000,000" />
             </div>
             <div class="form-group">
               <label class="form-label">Merit Budget %</label>
-              <input class="form-input" type="number" step="0.1" value="3.5" />
+              <input class="form-input" id="budget-pct" type="number" step="0.1" value="3.5" />
               <div class="form-hint">Auto-calculates to $1,400,000 total budget.</div>
             </div>
           </div>
@@ -111,13 +111,56 @@
             <div class="form-row">
               <div>
                 <label class="form-label" style="font-weight:400; font-size:12px;">Minimum %</label>
-                <input class="form-input" type="number" value="0" />
+                <input class="form-input" id="guideline-min" type="number" value="0" />
               </div>
               <div>
                 <label class="form-label" style="font-weight:400; font-size:12px;">Maximum % (before approval required)</label>
-                <input class="form-input" type="number" value="10" />
+                <input class="form-input" id="guideline-max" type="number" value="10" />
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Finance module -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Finance Module: Team-Based Budgeting</div>
+            <div class="card-subtitle">Set merit and bonus % by team makeup (department payroll mix)</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Default Merit %</label>
+              <input class="form-input" id="finance-default-merit" type="number" step="0.1" value="3.5" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Default Bonus %</label>
+              <input class="form-input" id="finance-default-bonus" type="number" step="0.1" value="8" />
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th class="numeric">Headcount</th>
+                  <th class="numeric">Payroll</th>
+                  <th class="numeric">Payroll Mix</th>
+                  <th class="numeric">Merit %</th>
+                  <th class="numeric">Bonus %</th>
+                  <th class="numeric">Merit Budget</th>
+                  <th class="numeric">Bonus Budget</th>
+                </tr>
+              </thead>
+              <tbody id="finance-table-body"></tbody>
+            </table>
+          </div>
+          <div class="alert alert-blue mt-16">
+            <div class="alert-icon">ℹ</div>
+            <div id="finance-summary-text">Import employees to see team-level finance allocations.</div>
           </div>
         </div>
       </div>
@@ -170,6 +213,7 @@
   </div>
 </div>
 <div id="toast"></div>
+<script src="js/store.js"></script>
 <script>
   const r = localStorage.getItem('mc_role') || 'hr';
   document.body.setAttribute('data-role', r);
@@ -181,6 +225,96 @@
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3000);
   }
+
+  function fmt(n) { return '$' + Math.round(n || 0).toLocaleString(); }
+  function toNumber(v) { return Number(String(v || '').replace(/[$,\s]/g, '')) || 0; }
+
+  function renderFinanceModule() {
+    const body     = document.getElementById('finance-table-body');
+    const finance  = Store.getFinanceModule();
+    const breakdown = Store.getTeamBudgetBreakdown();
+
+    document.getElementById('finance-default-merit').value = finance.defaultMeritPct;
+    document.getElementById('finance-default-bonus').value = finance.defaultBonusPct;
+
+    if (!breakdown.rows.length) {
+      body.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--gray-500);">No employees imported yet.</td></tr>';
+      document.getElementById('finance-summary-text').textContent = 'Import employees to calculate merit and bonus spend by team payroll mix.';
+      return;
+    }
+
+    body.innerHTML = breakdown.rows.map(row => `
+      <tr>
+        <td>${row.department}</td>
+        <td class="numeric">${row.headcount}</td>
+        <td class="numeric">${fmt(row.payroll)}</td>
+        <td class="numeric">${(row.payrollShare * 100).toFixed(1)}%</td>
+        <td class="numeric"><input class="form-input" style="max-width:92px; margin-left:auto;" type="number" step="0.1" data-dept-merit="${row.department}" value="${row.meritPct}" /></td>
+        <td class="numeric"><input class="form-input" style="max-width:92px; margin-left:auto;" type="number" step="0.1" data-dept-bonus="${row.department}" value="${row.bonusPct}" /></td>
+        <td class="numeric">${fmt(row.meritBudget)}</td>
+        <td class="numeric">${fmt(row.bonusBudget)}</td>
+      </tr>
+    `).join('');
+
+    document.getElementById('finance-summary-text').innerHTML =
+      `Team-based budgets from <strong>${fmt(breakdown.totalPayroll)}</strong> payroll: merit <strong>${fmt(breakdown.totalMeritBudget)}</strong>, bonus <strong>${fmt(breakdown.totalBonusBudget)}</strong>.`;
+  }
+
+  function loadCycleSettings() {
+    const cycle = Store.getCycle();
+    document.getElementById('cycle-name').value = cycle.name || '';
+    document.getElementById('open-date').value = cycle.openDate || '';
+    document.getElementById('close-date').value = cycle.closeDate || '';
+    document.getElementById('effective-date').value = cycle.effectiveDate || '';
+    document.getElementById('total-payroll').value = fmt(cycle.totalPayroll || 0);
+    document.getElementById('budget-pct').value = cycle.budgetPct ?? 3.5;
+    document.getElementById('guideline-min').value = cycle.guidelineMin ?? 0;
+    document.getElementById('guideline-max').value = cycle.guidelineMax ?? 10;
+    document.getElementById('sb-cycle-name').textContent = cycle.name || '2025 Annual Merit Cycle';
+  }
+
+  function saveSettings() {
+    const cycle = Store.getCycle();
+    const nextCycle = {
+      ...cycle,
+      name: document.getElementById('cycle-name').value.trim() || cycle.name,
+      openDate: document.getElementById('open-date').value,
+      closeDate: document.getElementById('close-date').value,
+      effectiveDate: document.getElementById('effective-date').value,
+      totalPayroll: toNumber(document.getElementById('total-payroll').value),
+      budgetPct: Number(document.getElementById('budget-pct').value) || 0,
+      guidelineMin: Number(document.getElementById('guideline-min').value) || 0,
+      guidelineMax: Number(document.getElementById('guideline-max').value) || 0,
+    };
+    nextCycle.budgetTotal = nextCycle.totalPayroll * (nextCycle.budgetPct / 100);
+    Store.setCycle(nextCycle);
+
+    const currentFinance = Store.getFinanceModule();
+    const departments = { ...currentFinance.departments };
+    document.querySelectorAll('[data-dept-merit]').forEach(el => {
+      const dept = el.getAttribute('data-dept-merit');
+      departments[dept] = departments[dept] || {};
+      departments[dept].meritPct = Number(el.value) || 0;
+    });
+    document.querySelectorAll('[data-dept-bonus]').forEach(el => {
+      const dept = el.getAttribute('data-dept-bonus');
+      departments[dept] = departments[dept] || {};
+      departments[dept].bonusPct = Number(el.value) || 0;
+    });
+
+    Store.setFinanceModule({
+      defaultMeritPct: Number(document.getElementById('finance-default-merit').value) || 0,
+      defaultBonusPct: Number(document.getElementById('finance-default-bonus').value) || 0,
+      departments,
+    });
+
+    document.getElementById('sb-cycle-name').textContent = nextCycle.name;
+    renderFinanceModule();
+    showToast('Settings saved');
+  }
+
+  loadCycleSettings();
+  renderFinanceModule();
 </script>
 </body>
 </html>
