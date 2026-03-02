@@ -209,6 +209,13 @@ function ratingBadge(r) {
   return `<span class="badge ${cls[r] || 'badge-gray'}" style="font-size:11px">${r}</span>`;
 }
 
+function deriveStatus(currentStatus, meritPct, guidelineMax, editedOrSaved = false) {
+  if (meritPct > guidelineMax) return 'Flagged';
+  if (currentStatus === 'Approved') return 'Approved';
+  if (editedOrSaved) return 'Submitted';
+  return 'Draft';
+}
+
 // ── Empty state ───────────────────────────────────────────────
 function showEmptyState() {
   document.getElementById('budget-tracker').style.display = 'none';
@@ -323,7 +330,7 @@ function updatePct(id, val) {
   const cycle        = Store.getCycle();
   const guidelineMax = cycle.guidelineMax || 10;
   const current      = Store.getRecommendation(id);
-  const newStatus    = pct > guidelineMax ? 'Flagged' : (current.status || 'Draft');
+  const newStatus    = deriveStatus(current.status || 'Draft', pct, guidelineMax, true);
 
   Store.setRecommendation(id, { meritPct: pct, status: newStatus });
   renderTable();
@@ -394,11 +401,7 @@ function saveModal() {
   const cycle        = Store.getCycle();
   const guidelineMax = cycle.guidelineMax || 10;
   const current      = Store.getRecommendation(editingId);
-
-  // Draft→Submitted on save; exceeds guideline→Flagged
-  let newStatus = current.status || 'Draft';
-  if (newStatus === 'Draft') newStatus = 'Submitted';
-  if (clamped > guidelineMax) newStatus = 'Flagged';
+  const newStatus    = deriveStatus(current.status || 'Draft', clamped, guidelineMax, true);
 
   Store.setRecommendation(editingId, { meritPct: clamped, rating, notes, status: newStatus });
 

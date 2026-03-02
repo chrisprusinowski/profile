@@ -165,38 +165,7 @@
                   <th>Status</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#4F46E5">JR</div><div class="employee-name">Jamie Rivera</div></div></td>
-                  <td class="text-muted">Engineering</td>
-                  <td class="numeric">8</td>
-                  <td><span class="badge badge-green">Submitted</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#0891B2">SC</div><div class="employee-name">Sam Chen</div></div></td>
-                  <td class="text-muted">Product</td>
-                  <td class="numeric">5</td>
-                  <td><span class="badge badge-green">Submitted</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#059669">AK</div><div class="employee-name">Aisha Kofi</div></div></td>
-                  <td class="text-muted">Sales</td>
-                  <td class="numeric">12</td>
-                  <td><span class="badge badge-amber">In Progress</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#DC2626">MP</div><div class="employee-name">Marcus Park</div></div></td>
-                  <td class="text-muted">Finance</td>
-                  <td class="numeric">4</td>
-                  <td><span class="badge badge-gray">Not Started</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#7C3AED">LP</div><div class="employee-name">Laura Patel</div></div></td>
-                  <td class="text-muted">Operations</td>
-                  <td class="numeric">9</td>
-                  <td><span class="badge badge-gray">Not Started</span></td>
-                </tr>
-              </tbody>
+              <tbody id="manager-completion-body"></tbody>
             </table>
           </div>
         </div>
@@ -210,43 +179,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div class="bar-chart">
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Engineering</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:82%; background:#2563EB;"></div>
-                </div>
-                <div class="bar-chart-val">$412K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Sales</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:68%; background:#7C3AED;"></div>
-                </div>
-                <div class="bar-chart-val">$265K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Product</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:54%; background:#0891B2;"></div>
-                </div>
-                <div class="bar-chart-val">$178K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Operations</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:41%; background:#059669;"></div>
-                </div>
-                <div class="bar-chart-val">$94K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Finance</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:28%; background:#D97706;"></div>
-                </div>
-                <div class="bar-chart-val">$31K</div>
-              </div>
-            </div>
+            <div class="bar-chart" id="department-budget-chart"></div>
 
             <div class="divider"></div>
 
@@ -255,7 +188,7 @@
               <span class="fw-700" id="dept-budget-summary">$980K of $1.4M</span>
             </div>
             <div class="progress-bar mt-8">
-              <div class="progress-fill blue" style="width:70%"></div>
+              <div class="progress-fill blue" id="total-allocated-progress" style="width:70%"></div>
             </div>
           </div>
         </div>
@@ -307,6 +240,29 @@
     if (Math.abs(n) >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
     if (Math.abs(n) >= 1000)    return '$' + Math.round(n / 1000) + 'K';
     return '$' + Math.round(n);
+  }
+
+  function initials(name) {
+    return String(name || 'Unassigned')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(part => part[0].toUpperCase())
+      .join('');
+  }
+
+  function hashColor(seed) {
+    const palette = ['#4F46E5', '#0891B2', '#059669', '#DC2626', '#7C3AED', '#D97706', '#2563EB'];
+    const txt = String(seed || 'Unassigned');
+    let hash = 0;
+    for (let i = 0; i < txt.length; i++) hash = ((hash << 5) - hash) + txt.charCodeAt(i);
+    return palette[Math.abs(hash) % palette.length];
+  }
+
+  function statusBadge(status) {
+    if (status === 'Submitted') return 'badge-green';
+    if (status === 'In Progress') return 'badge-amber';
+    return 'badge-gray';
   }
 
   function showToast(msg) {
@@ -362,6 +318,7 @@
     const counts    = Store.getStatusCounts();
     const depts     = Store.getDepartments();
 
+    const recommendations = Store.getRecommendations();
     const total     = employees.length;
     const submitted = counts.Submitted + counts.Approved + counts.Flagged;
     const flagged   = counts.Flagged;
