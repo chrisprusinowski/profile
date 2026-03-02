@@ -54,9 +54,9 @@
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-icon blue">$</div>
-          <div class="metric-label">Total Merit Budget</div>
-          <div class="metric-value" id="metric-total-budget">$1.4M</div>
-          <div class="metric-sub" id="metric-total-budget-sub">3.5% of payroll</div>
+          <div class="metric-label">Cycle Budget</div>
+          <div class="metric-value">$1.4M</div>
+          <div class="metric-sub">Configured cycle budget</div>
         </div>
         <div class="metric-card">
           <div class="metric-icon green">↑</div>
@@ -93,7 +93,7 @@
         <!-- Budget status -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Budget Status</div>
+            <div class="card-title">Budget Status (Cycle vs Finance Model)</div>
           </div>
           <div class="card-body">
             <div style="text-align:center; padding: 10px 0 20px;">
@@ -104,8 +104,11 @@
               <div class="progress-fill green" id="budget-progress-fill" style="width:70%"></div>
             </div>
             <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
-              <div id="budget-row-total" style="display:flex; justify-content:space-between;">
-                <span class="text-muted">Total Budget</span><span class="fw-700">$1,400,000</span>
+              <div style="display:flex; justify-content:space-between;">
+                <span class="text-muted">Cycle Budget</span><span class="fw-700">$1,400,000</span>
+              </div>
+              <div style="display:flex; justify-content:space-between;">
+                <span class="text-muted">Finance Model Budget</span><span class="fw-700" id="finance-model-budget">$0</span>
               </div>
               <div id="budget-row-allocated" style="display:flex; justify-content:space-between;">
                 <span class="text-muted">Allocated</span><span class="fw-700" style="color:var(--green-600);">$980,000</span>
@@ -155,114 +158,87 @@
 </div>
 <script src="js/store.js"></script>
 <script>
-  function fmtMoney(n) { return '$' + Math.round(n || 0).toLocaleString(); }
+  function fmt(n) { return '$' + Math.round(n || 0).toLocaleString(); }
+  function fmtK(n) {
+    if (Math.abs(n) >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1000)    return '$' + Math.round(n / 1000) + 'K';
+    return '$' + Math.round(n || 0);
+  }
 
-  function initExecutive() {
-    const role = localStorage.getItem('mc_role') || 'exec';
-    document.body.setAttribute('data-role', role);
-    const roleSelect = document.querySelector('.role-switcher select');
-    roleSelect.value = role;
-    roleSelect.addEventListener('change', function() {
-      localStorage.setItem('mc_role', this.value);
-      document.body.setAttribute('data-role', this.value);
-    });
+  const r = localStorage.getItem('mc_role') || 'exec';
+  document.body.setAttribute('data-role', r);
+  document.querySelector('.role-switcher select').value = r;
 
-    const employees = Store.getEmployees();
-    const recs = Store.getRecommendations();
-    const summary = Store.getBudgetSummary();
-    const cycle = Store.getCycle();
-    const teamBreakdown = Store.getTeamBudgetBreakdown();
-    const statusCounts = Store.getStatusCounts();
-    const flaggedCount = Store.getFlaggedCount();
-
-    const navBadge = document.getElementById('exec-nav-flagged');
-    navBadge.textContent = flaggedCount;
-    navBadge.style.display = flaggedCount > 0 ? 'inline-block' : 'none';
-
-    if (!employees.length) {
+  (function initExecutive() {
+    if (!Store.hasEmployees()) {
       const content = document.querySelector('.page-content');
       const banner = document.createElement('div');
       banner.className = 'alert alert-blue';
       banner.style.cssText = 'margin-bottom:20px; align-items:center;';
       banner.innerHTML = `
         <div class="alert-icon" style="font-size:20px;">⬆</div>
-        <div style="flex:1;">
-          <strong>No employees imported yet.</strong>
-          Upload employee data to populate executive metrics and department distribution.
-        </div>
+        <div style="flex:1;"><strong>No employees imported yet.</strong> Executive metrics will populate after employee CSV import.</div>
         <a href="import.html" class="btn btn-primary btn-sm" style="margin-left:12px; white-space:nowrap;">Import CSV →</a>`;
       content.insertBefore(banner, content.firstChild);
     }
 
-    const employeeCount = employees.length;
-    const recommendationCount = employees.filter((e) => {
-      const status = recs[e.id]?.status || 'Draft';
-      return status !== 'Draft';
-    }).length;
+    const employees = Store.getEmployees();
+    const summary = Store.getBudgetSummary();
+    const planning = Store.getPlanningSummary();
+    const counts = Store.getStatusCounts();
+    const cycle = Store.getCycle();
+    const recs = Store.getRecommendations();
 
-    document.getElementById('metric-total-budget').textContent = fmtMoney(summary.budget);
-    document.getElementById('metric-total-budget-sub').textContent = `${cycle.budgetPct || 0}% of payroll`;
-    document.getElementById('metric-avg-merit').textContent = `${summary.avgPct.toFixed(1)}%`;
-    document.getElementById('metric-avg-merit-sub').textContent = `${recommendationCount} recommendation${recommendationCount !== 1 ? 's' : ''} submitted`;
-    document.getElementById('metric-employee-count').textContent = employeeCount;
-    document.getElementById('metric-employee-count-sub').textContent = `${teamBreakdown.rows.length} department${teamBreakdown.rows.length !== 1 ? 's' : ''} imported`;
-    document.getElementById('metric-flagged-count').textContent = flaggedCount;
-    document.getElementById('metric-flagged-count-sub').textContent = flaggedCount ? 'Require approval' : 'No exceptions';
+    const cards = document.querySelectorAll('.metric-card');
+    cards[0].querySelector('.metric-value').textContent = fmtK(planning.cycleBudget.budgetTotal);
+    cards[0].querySelector('.metric-sub').textContent = `${planning.cycleBudget.budgetPct.toFixed(1)}% configured cycle budget`;
 
-    const pctUsed = Math.max(0, summary.pctUsed * 100);
-    document.getElementById('budget-allocated-pct').textContent = `${Math.round(pctUsed)}%`;
-    document.getElementById('budget-allocated-subtext').textContent = 'of budget allocated';
-    document.getElementById('budget-progress-fill').style.width = `${Math.min(pctUsed, 100)}%`;
-    document.querySelector('#budget-row-total .fw-700').textContent = fmtMoney(summary.budget);
-    document.querySelector('#budget-row-allocated .fw-700').textContent = fmtMoney(summary.allocated);
-    document.querySelector('#budget-row-remaining .fw-700').textContent = fmtMoney(summary.remaining);
+    const avgPct = summary.avgPct || 0;
+    cards[1].querySelector('.metric-value').textContent = `${avgPct.toFixed(1)}%`;
+    const financeMeritPct = planning.financeModel.totalPayroll ? (planning.financeModel.meritBudgetTotal / planning.financeModel.totalPayroll) * 100 : 0;
+    cards[1].querySelector('.metric-sub').textContent = `Finance model assumption: ${financeMeritPct.toFixed(1)}%`;
 
-    document.getElementById('cycle-submitted').textContent = statusCounts.Submitted + statusCounts.Approved;
-    document.getElementById('cycle-in-progress').textContent = statusCounts.Draft;
-    document.getElementById('cycle-not-started').textContent = Math.max(employeeCount - recommendationCount, 0);
-    document.getElementById('cycle-flagged').textContent = statusCounts.Flagged;
+    const submitted = counts.Submitted + counts.Approved + counts.Flagged;
+    const total = employees.length;
+    const pctComplete = total ? Math.round((submitted / total) * 100) : 0;
+    cards[2].querySelector('.metric-value').textContent = total;
+    cards[2].querySelector('.metric-sub').textContent = `${pctComplete}% recommendations in`;
 
-    const completePct = employeeCount ? Math.round((recommendationCount / employeeCount) * 100) : 0;
-    const inProgressPct = employeeCount ? Math.round(((statusCounts.Draft || 0) / employeeCount) * 100) : 0;
-    const startInProgress = completePct;
-    const endInProgress = Math.min(completePct + inProgressPct, 100);
-    document.getElementById('cycle-progress-fill').style.background =
-      `linear-gradient(90deg, var(--green-600) ${completePct}%, var(--amber-600) ${startInProgress}% ${endInProgress}%, var(--gray-200) ${endInProgress}% )`;
-    document.getElementById('cycle-progress-subtext').textContent = `${completePct}% complete`;
-
-    const chart = document.getElementById('department-distribution-chart');
-    const empty = document.getElementById('department-distribution-empty');
-    chart.innerHTML = '';
-    if (!teamBreakdown.rows.length) {
-      empty.style.display = 'block';
-      return;
-    }
-
-    const palette = ['#2563EB', '#7C3AED', '#0891B2', '#059669', '#D97706', '#DC2626', '#4F46E5'];
-    const rows = teamBreakdown.rows
-      .map((row) => {
-        const deptEmployees = employees.filter((e) => (e.department || 'Unassigned') === row.department);
-        const totalPct = deptEmployees.reduce((sum, e) => sum + ((recs[e.id]?.meritPct) || 0), 0);
-        const avgPct = deptEmployees.length ? (totalPct / deptEmployees.length) : 0;
-        return { ...row, avgPct };
-      })
-      .sort((a, b) => b.avgPct - a.avgPct);
-
-    const maxAvg = Math.max(...rows.map((r) => r.avgPct), 1);
-    rows.forEach((row, index) => {
-      const width = Math.max((row.avgPct / maxAvg) * 100, 4);
-      const el = document.createElement('div');
-      el.className = 'bar-chart-row';
-      el.innerHTML = `
-        <div class="bar-chart-label">${row.department}</div>
-        <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:${width}%; background:${palette[index % palette.length]};"></div></div>
-        <div class="bar-chart-val">${row.avgPct.toFixed(1)}% avg</div>`;
-      chart.appendChild(el);
+    let exceptions = 0;
+    employees.forEach(e => {
+      const pct = Number(recs[e.id]?.meritPct) || 0;
+      if (pct > (cycle.guidelineMax || 10)) exceptions += 1;
     });
-    empty.style.display = 'none';
-  }
+    cards[3].querySelector('.metric-value').textContent = exceptions;
 
-  initExecutive();
+    const budgetRows = document.querySelectorAll('.card-body .fw-700');
+    if (budgetRows[0]) budgetRows[0].textContent = fmt(planning.cycleBudget.budgetTotal);
+    const financeBudgetEl = document.getElementById('finance-model-budget');
+    if (financeBudgetEl) financeBudgetEl.textContent = fmt(planning.financeModel.meritBudgetTotal);
+    if (budgetRows[1]) budgetRows[1].textContent = fmt(summary.allocated);
+    if (budgetRows[2]) budgetRows[2].textContent = fmt(summary.remaining);
+
+    const pctUsed = planning.cycleBudget.budgetTotal ? Math.min((summary.allocated / planning.cycleBudget.budgetTotal) * 100, 100) : 0;
+    document.querySelector('.progress-fill.green').style.width = `${pctUsed}%`;
+    document.querySelector('.card-body div[style*="font-size:42px"]').textContent = `${Math.round(pctUsed)}%`;
+
+    // Assumption-driven view: department bars use finance model percentages/budgets
+    const rows = planning.financeModel.rows;
+    const chartRows = document.querySelectorAll('.bar-chart .bar-chart-row');
+    const maxPct = Math.max(...rows.map(row => row.meritPct), 0);
+    chartRows.forEach((el, idx) => {
+      const row = rows[idx];
+      if (!row) {
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = '';
+      el.querySelector('.bar-chart-label').textContent = row.department;
+      el.querySelector('.bar-chart-val').textContent = `${row.meritPct.toFixed(1)}% / ${fmtK(row.meritBudget)}`;
+      const width = maxPct ? Math.max((row.meritPct / maxPct) * 100, 10) : 0;
+      el.querySelector('.bar-chart-bar').style.width = `${width}%`;
+    });
+  })();
 </script>
 </body>
 </html>
