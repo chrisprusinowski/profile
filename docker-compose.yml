@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: profile-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+      POSTGRES_USER: ${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app_password}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-app_user} -d ${POSTGRES_DB:-app_db}'
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 8
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: profile-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: ${API_PORT:-4000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://app_user:app_password@postgres:5432/app_db}
+      NODE_ENV: ${NODE_ENV:-development}
+    ports:
+      - '${API_PORT:-4000}:4000'
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: profile-web
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      PORT: ${WEB_PORT:-3000}
+      API_BASE_URL: ${API_BASE_URL:-http://api:4000}
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+
+volumes:
+  postgres_data:
