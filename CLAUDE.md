@@ -260,20 +260,10 @@ Deployed: GitHub Pages (36+ deployments)
 
                                    ---
 
-                                   ## Out of Scope (do not build yet)
-
-                                   - React/Vite frontend migration
-                                   - - Equity / RSU planning
-                                     - - HRIS integrations (Workday, BambooHR, etc.)
-                                       - - Authentication / login (scaffolding exists in packages/ but not active)
-                                         - - Full backend persistence (Postgres infra exists but UI still uses localStorage)
-                                          
-                                           - ---
 
                                            ## What Claude Should NOT Do
 
                                            - Do not run npm install or modify dependencies without being asked
-                                           - - Do not refactor merit-bonus/ to React unless explicitly asked
                                              - - Do not touch infra/postgres/migrations without explicit instruction
                                                - - Do not add a build step to merit-bonus/ — it is intentionally plain HTML/JS
                                                  - - Do not rename or reorganize files without asking first
