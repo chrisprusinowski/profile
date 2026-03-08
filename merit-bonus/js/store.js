@@ -67,8 +67,8 @@ const Store = (() => {
     },
 
     // ── Computed helpers ─────────────────────────────────────────
-    getBudgetSummary() {
-      const employees = get('employees') || [];
+    getBudgetSummary(employees) {
+      employees       = employees || get('employees') || [];
       const recs      = get('recommendations') || {};
       const cycle     = this.getCycle();
       const budget    = cycle.budgetTotal || (cycle.totalPayroll * cycle.budgetPct / 100);
@@ -113,6 +113,87 @@ const Store = (() => {
       return employees.filter(e => (recs[e.id]?.status) === 'Flagged').length;
     },
 
+    // ── Users ────────────────────────────────────────────────────
+    getUsers()    { return get('users') || []; },
+    setUsers(arr) { set('users', arr); },
+    hasUsers()    { return (get('users') || []).length > 0; },
+    hasAdmins()   { return (get('users') || []).some(u => u.role === 'admin'); },
+
+    addUser(data) {
+      const users = this.getUsers();
+      const COLORS = ['#4F46E5','#0891B2','#059669','#D97706','#DC2626','#7C3AED','#0D9488','#EA580C'];
+      const parts   = (data.name || '').split(' ');
+      const user = {
+        id:          `u-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+        initials:    ((parts[0]?.[0] || '') + (parts[parts.length-1]?.[0] || '')).toUpperCase(),
+        avatarColor: COLORS[users.length % COLORS.length],
+        explicitEmployeeIds: [],
+        ...data,
+        createdAt: new Date().toISOString(),
+      };
+      users.push(user);
+      set('users', users);
+      return user;
+    },
+
+    updateUser(id, changes) {
+      set('users', this.getUsers().map(u => u.id === id ? { ...u, ...changes } : u));
+    },
+
+    removeUser(id) {
+      set('users', this.getUsers().filter(u => u.id !== id));
+      // clear session if this user was logged in
+      if (this.getCurrentUser()?.id === id) this.logout();
+    },
+
+    getUserByEmail(email) {
+      if (!email) return null;
+      return (get('users') || []).find(u =>
+        u.email.toLowerCase() === email.toLowerCase()
+      ) || null;
+    },
+
+    getUserById(id) {
+      return (get('users') || []).find(u => u.id === id) || null;
+    },
+
+    // ── Session ──────────────────────────────────────────────────
+    getCurrentUser() { return get('session') || null; },
+    setCurrentUser(user) { set('session', user); },
+    logout() { localStorage.removeItem(P + 'session'); },
+
+    // Re-sync session from users list (in case role was updated by admin)
+    refreshSession() {
+      const session = this.getCurrentUser();
+      if (!session) return;
+      const updated = this.getUserById(session.id);
+      if (updated) set('session', updated);
+    },
+
+    // ── Permissions / visibility ─────────────────────────────────
+    getVisibleEmployees(user) {
+      const all  = get('employees') || [];
+      user = user || this.getCurrentUser();
+      if (!user || user.role === 'admin' || user.role === 'exec') return all;
+      if (user.role !== 'manager') return [];
+
+      const nameLC   = (user.name  || '').toLowerCase().trim();
+      const emailLC  = (user.email || '').toLowerCase().trim();
+      const explicit = new Set(user.explicitEmployeeIds || []);
+
+      return all.filter(e => {
+        if (explicit.has(e.id)) return true;
+        if (!e.manager) return false;
+        const m = e.manager.toLowerCase().trim();
+        return m === nameLC || m === emailLC;
+      });
+    },
+
+    getManagerTeamSize(user) {
+      return this.getVisibleEmployees(user).length;
+    },
+
+    // getBudgetSummary optionally scoped to a subset of employees
     // ── Clear ────────────────────────────────────────────────────
     clearEmployees()  { set('employees', []); set('recommendations', {}); },
     clearAll() {

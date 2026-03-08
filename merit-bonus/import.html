@@ -28,22 +28,23 @@
       <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
       <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations</a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
-      <div class="nav-section-label">Data</div>
-      <a href="import.html" class="nav-item active"><span class="nav-icon">⬆</span> Import CSV</a>
-      <div class="nav-section-label">Reports</div>
-      <a href="executive.html" class="nav-item"><span class="nav-icon">◈</span> Executive Summary</a>
-      <div class="nav-section-label">Admin</div>
-      <a href="admin.html" class="nav-item"><span class="nav-icon">⚙</span> Cycle Settings</a>
+      <div class="nav-section-label" data-admin-only>Data</div>
+      <a href="import.html" class="nav-item active" data-admin-only><span class="nav-icon">⬆</span> Import CSV</a>
+      <div class="nav-section-label" data-exec-plus>Reports</div>
+      <a href="executive.html" class="nav-item" data-exec-plus><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label" data-admin-only>Admin</div>
+      <a href="admin.html" class="nav-item" data-admin-only><span class="nav-icon">⚙</span> Cycle Settings</a>
     </nav>
     <div class="sidebar-footer">
-      <div class="role-switcher">
-        <label>Viewing as</label>
-        <select onchange="switchRole(this.value)">
-          <option value="hr" selected>HR / Comp Admin</option>
-          <option value="manager">Manager</option>
-          <option value="exec">Executive</option>
-        </select>
+      <div class="sidebar-user">
+        <div class="avatar avatar-sm" id="sidebar-avatar">?</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name" id="sidebar-user-name">Loading…</div>
+          <div class="sidebar-user-role" id="sidebar-user-role"></div>
+        </div>
+        <button class="btn-sign-out" onclick="Auth.logout()">Sign out</button>
       </div>
+      <div id="admin-preview-row" class="admin-preview-row" style="display:none;"></div>
     </div>
   </aside>
 
@@ -180,6 +181,7 @@ Carlos Vega,Sales,Account Executive,95000,Aisha Kofi,carlos@company.com,2022-01-
 <div id="toast"></div>
 
 <script src="js/store.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/csv.js"></script>
 <script>
 
@@ -422,12 +424,6 @@ function goToStep(n) {
   document.getElementById('conn-2').className = 'step-connector' + (n > 2 ? ' done' : '');
 }
 
-// ── Role + init ──────────────────────────────────────────────────
-function switchRole(role) {
-  localStorage.setItem('mc_role', role);
-  document.body.setAttribute('data-role', role);
-}
-
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -436,9 +432,8 @@ function showToast(msg) {
 }
 
 (function init() {
-  const role = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', role);
-  document.querySelector('.role-switcher select').value = role;
+  Auth.requireAdmin(); // import is admin-only
+  Auth.applyUI();
 
   // Show existing employee count warning if data already exists
   const count = Store.getEmployees().length;

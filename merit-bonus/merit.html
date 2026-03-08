@@ -28,18 +28,26 @@
       <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
       <a href="merit.html" class="nav-item active"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge" id="flagged-badge" style="display:none"></span></a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
-      <div class="nav-section-label">Data</div>
-      <a href="import.html" class="nav-item"><span class="nav-icon">⬆</span> Import CSV</a>
-      <div class="nav-section-label">Reports</div>
-      <a href="executive.html" class="nav-item"><span class="nav-icon">◈</span> Executive Summary</a>
-      <div class="nav-section-label">Admin</div>
-      <a href="admin.html" class="nav-item"><span class="nav-icon">⚙</span> Cycle Settings</a>
+      <div class="nav-section-label" data-admin-only>Data</div>
+      <a href="import.html" class="nav-item" data-admin-only><span class="nav-icon">⬆</span> Import CSV</a>
+      <div class="nav-section-label" data-exec-plus>Reports</div>
+      <a href="executive.html" class="nav-item" data-exec-plus><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label" data-admin-only>Admin</div>
+      <a href="admin.html" class="nav-item" data-admin-only><span class="nav-icon">⚙</span> Cycle Settings</a>
     </nav>
     <div class="sidebar-footer">
-      <div class="role-switcher">
-        <label>Viewing as</label>
-        <select onchange="switchRole(this.value)">
-          <option value="hr">HR / Comp Admin</option>
+      <div class="sidebar-user">
+        <div class="avatar avatar-sm" id="sidebar-avatar">?</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name" id="sidebar-user-name">Loading…</div>
+          <div class="sidebar-user-role" id="sidebar-user-role"></div>
+        </div>
+        <button class="btn-sign-out" onclick="Auth.logout()">Sign out</button>
+      </div>
+      <div id="admin-preview-row" class="admin-preview-row" style="display:none;">
+        <span class="preview-label">Preview as</span>
+        <select onchange="Auth.setPreviewRole(this.value)">
+          <option value="">My actual view</option>
           <option value="manager">Manager</option>
           <option value="exec">Executive</option>
         </select>
@@ -188,12 +196,18 @@
 <div id="toast"></div>
 
 <script src="js/store.js"></script>
+<script src="js/auth.js"></script>
 <script>
 
 // ── State ─────────────────────────────────────────────────────
 const COLORS = ['#4F46E5','#0891B2','#059669','#D97706','#DC2626','#7C3AED','#0D9488','#EA580C'];
 let activeFilters = { search: '', dept: '', status: '' };
 let editingId     = null;
+
+// Returns only the employees the current user is allowed to see
+function getVisibleEmployees() {
+  return Store.getVisibleEmployees(Auth.getUser());
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 function fmt(n) { return '$' + Math.round(n).toLocaleString(); }
@@ -224,8 +238,19 @@ function showEmptyState() {
 
 // ── Render table ──────────────────────────────────────────────
 function renderTable() {
-  const employees = Store.getEmployees();
-  if (!employees.length) { showEmptyState(); return; }
+  const employees = getVisibleEmployees();
+  if (!employees.length && !Store.hasEmployees()) { showEmptyState(); return; }
+  if (!employees.length) {
+    // User is a manager with no matching team
+    document.getElementById('merit-tbody').innerHTML =
+      `<tr><td colspan="8" style="text-align:center; color:var(--gray-400); padding:32px;">
+        No employees are assigned to your account yet.<br>
+        <span style="font-size:12.5px;">Your name or email must match the Manager column in the employee data.</span>
+      </td></tr>`;
+    document.getElementById('row-count').textContent = '0 employees';
+    recalcBudget();
+    return;
+  }
 
   const recs         = Store.getRecommendations();
   const cycle        = Store.getCycle();
@@ -256,7 +281,7 @@ function renderTable() {
     const proposed = e.salary * (1 + pct / 100);
     const flagged  = pct > guidelineMax;
     const color    = e.avatarColor || COLORS[i % COLORS.length];
-    const locked   = status === 'Approved';
+    const locked   = status === 'Approved' || Auth.isExec();
 
     const tr = document.createElement('tr');
     if (flagged) tr.style.background = 'var(--amber-50)';
@@ -300,7 +325,9 @@ function renderTable() {
 
 // ── Budget tracker ────────────────────────────────────────────
 function recalcBudget() {
-  const { budget, allocated, remaining, avgPct, pctUsed } = Store.getBudgetSummary();
+  // Managers see their team's numbers; admins/execs see full org numbers
+  const scopedEmployees = Auth.isManager() ? getVisibleEmployees() : undefined;
+  const { budget, allocated, remaining, avgPct, pctUsed } = Store.getBudgetSummary(scopedEmployees);
 
   document.getElementById('budget-total-val').textContent = fmt(budget);
   document.getElementById('allocated-val').textContent    = fmt(allocated);
@@ -338,8 +365,9 @@ function filterStatus(val) { activeFilters.status = val;               renderTab
 let _modalSalary = 0;
 
 function openModal(id) {
+  if (Auth.isExec()) return; // execs are read-only
   editingId = id;
-  const employees = Store.getEmployees();
+  const employees = Store.getVisibleEmployees(Auth.getUser());
   const e         = employees.find(x => x.id === id);
   if (!e) return;
   const rec = Store.getRecommendation(id);
@@ -402,7 +430,7 @@ function saveModal() {
 
   Store.setRecommendation(editingId, { meritPct: clamped, rating, notes, status: newStatus });
 
-  const e = Store.getEmployees().find(x => x.id === editingId);
+  const e = Store.getVisibleEmployees(Auth.getUser()).find(x => x.id === editingId);
   closeModal();
   renderTable();
   showToast(`Saved — ${e.name}`);
@@ -463,30 +491,48 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+// ── Role switch helper ─────────────────────────────────────────
+function switchRole(role) {
+  localStorage.setItem('mc_role', role);
+  document.body.setAttribute('data-role', role);
+}
+
 // ── Init ──────────────────────────────────────────────────────
 (function init() {
-  // Role
-  const role = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', role);
-  document.querySelector('.role-switcher select').value = role;
+  Auth.applyUI();
 
-  // Cycle name
   const cycle = Store.getCycle();
   document.getElementById('sb-cycle-name').textContent = cycle.name || '2025 Annual Merit Cycle';
 
-  // Flagged badge
-  const flagged = Store.getFlaggedCount();
-  const badge   = document.getElementById('flagged-badge');
-  if (flagged > 0) { badge.style.display = ''; badge.textContent = flagged; }
+  // Topbar subtitle — show manager their scope
+  if (Auth.isManager()) {
+    const user = Auth.getUser();
+    const cnt  = Store.getVisibleEmployees(user).length;
+    document.getElementById('topbar-subtitle').textContent =
+      `Your team (${cnt} employee${cnt !== 1 ? 's' : ''})`;
+  }
 
-  // Populate dept filter from real imported departments
-  const depts  = Store.getDepartments();
+  // Flagged badge
+  if (Auth.isAdmin()) {
+    const flagged = Store.getFlaggedCount();
+    const badge   = document.getElementById('flagged-badge');
+    if (flagged > 0) { badge.style.display = ''; badge.textContent = flagged; }
+  }
+
+  // Populate dept filter from the user's visible departments
+  const visibleEmps = getVisibleEmployees();
+  const depts = [...new Set(visibleEmps.map(e => e.department).filter(Boolean))].sort();
   const select = document.getElementById('dept-filter');
   depts.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d; opt.textContent = d;
     select.appendChild(opt);
   });
+
+  // Hide admin-only Export + Submit All for execs
+  if (Auth.isExec()) {
+    document.querySelectorAll('.topbar-right .btn').forEach(b => b.style.display = 'none');
+  }
 
   // Modal close on overlay click
   document.getElementById('detail-modal').addEventListener('click', function(e) {

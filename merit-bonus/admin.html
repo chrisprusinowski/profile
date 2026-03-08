@@ -3,55 +3,145 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cycle Settings — MeritCycle</title>
+  <title>Admin — MeritCycle</title>
   <link rel="stylesheet" href="css/styles.css" />
 </head>
-<body data-role="hr">
+<body data-role="admin">
+
 <div class="layout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-logo">
       <div class="logo-icon">M</div>
-      <div><div class="logo-text">MeritCycle</div><div class="logo-sub">Compensation Planning</div></div>
+      <div>
+        <div class="logo-text">MeritCycle</div>
+        <div class="logo-sub">Compensation Planning</div>
+      </div>
     </div>
     <div class="sidebar-cycle-badge">
-      <div class="cycle-name">2025 Annual Merit Cycle</div>
-      <div class="cycle-status"><span class="status-dot"></span> Open — closes Apr 15, 2025</div>
+      <div class="cycle-name" id="sb-cycle-name">2025 Annual Merit Cycle</div>
+      <div class="cycle-status"><span class="status-dot"></span> Open</div>
     </div>
     <nav class="sidebar-nav">
       <div class="nav-section-label">Cycle</div>
       <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
-      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge">7</span></a>
+      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations</a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
-      <div class="nav-section-label">Reports</div>
-      <a href="executive.html" class="nav-item"><span class="nav-icon">◈</span> Executive Summary</a>
-      <div class="nav-section-label">Admin</div>
-      <a href="admin.html" class="nav-item active"><span class="nav-icon">⚙</span> Cycle Settings</a>
+      <div class="nav-section-label" data-admin-only>Data</div>
+      <a href="import.html" class="nav-item" data-admin-only><span class="nav-icon">⬆</span> Import CSV</a>
+      <div class="nav-section-label" data-exec-plus>Reports</div>
+      <a href="executive.html" class="nav-item" data-exec-plus><span class="nav-icon">◈</span> Executive Summary</a>
+      <div class="nav-section-label" data-admin-only>Admin</div>
+      <a href="admin.html" class="nav-item active" data-admin-only><span class="nav-icon">⚙</span> Cycle Settings</a>
     </nav>
     <div class="sidebar-footer">
-      <div class="role-switcher">
-        <label>Viewing as</label>
-        <select onchange="localStorage.setItem('mc_role',this.value); document.body.setAttribute('data-role',this.value)">
-          <option value="hr" selected>HR / Comp Admin</option>
+      <div class="sidebar-user">
+        <div class="avatar avatar-sm" id="sidebar-avatar">?</div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name" id="sidebar-user-name">Loading…</div>
+          <div class="sidebar-user-role" id="sidebar-user-role"></div>
+        </div>
+        <button class="btn-sign-out" onclick="Auth.logout()">Sign out</button>
+      </div>
+      <div id="admin-preview-row" class="admin-preview-row" style="display:none;">
+        <span class="preview-label">Preview as</span>
+        <select onchange="Auth.setPreviewRole(this.value)">
+          <option value="">My actual view</option>
           <option value="manager">Manager</option>
           <option value="exec">Executive</option>
         </select>
       </div>
     </div>
   </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
   <div class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <div class="page-title">Cycle Settings</div>
-        <div class="page-subtitle">Configure the active merit cycle</div>
+        <div class="page-title">Admin</div>
+        <div class="page-subtitle">User accounts &amp; cycle configuration</div>
       </div>
       <div class="topbar-right">
-        <button class="btn btn-secondary btn-sm">Discard</button>
-        <button class="btn btn-primary btn-sm" onclick="showToast('Settings saved')">Save Changes</button>
+        <button class="btn btn-secondary btn-sm" onclick="discardSettings()">Discard</button>
+        <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Settings</button>
       </div>
     </header>
+
     <div class="page-content">
 
-      <!-- Cycle details -->
+      <!-- ── User Management ────────────────────────────────── -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <div>
+            <div class="card-title">User Accounts</div>
+            <div class="card-subtitle">Manage who can access MeritCycle and their permissions</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="toggleAddUserForm()">+ Add User</button>
+        </div>
+
+        <!-- Add user form (hidden by default) -->
+        <div id="add-user-form" style="display:none; border-bottom:1px solid var(--gray-100);">
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input class="form-input" id="new-user-name" placeholder="e.g. Jamie Rivera" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input class="form-input" id="new-user-email" type="email" placeholder="jamie@company.com"
+                  onkeydown="if(event.key==='Enter') addUser()" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Role</label>
+                <select class="form-select" id="new-user-role">
+                  <option value="admin">Admin — full access</option>
+                  <option value="manager" selected>Manager — own team only</option>
+                  <option value="exec">Executive — read-only</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-hint" style="margin-bottom:12px;">
+              Managers will automatically see employees whose <strong>Manager</strong> column in the CSV matches their name or email.
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-primary btn-sm" onclick="addUser()">Add User</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleAddUserForm()">Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users table -->
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="users-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th style="text-align:center;">Team Size</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="5" style="text-align:center; color:var(--gray-400); padding:24px;">
+                Loading users…
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card-footer" style="justify-content:flex-start; gap:0;">
+          <div style="font-size:12.5px; color:var(--gray-500); line-height:1.5;">
+            <strong>Admin</strong> — full access to all employees, settings, and import.<br>
+            <strong>Manager</strong> — sees and edits only their assigned team (matched by employee's Manager field).<br>
+            <strong>Executive</strong> — read-only view of all data and reports.
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Cycle details ──────────────────────────────────── -->
       <div class="card mb-20">
         <div class="card-header">
           <div class="card-title">Cycle Details</div>
@@ -60,36 +150,36 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Cycle Name</label>
-              <input class="form-input" value="2025 Annual Merit Cycle" />
+              <input class="form-input" id="cycle-name" />
             </div>
             <div class="form-group">
               <label class="form-label">Cycle Type</label>
-              <select class="form-select">
-                <option selected>Merit (Salary Increase)</option>
-                <option>Bonus</option>
-                <option>Equity Refresh</option>
+              <select class="form-select" id="cycle-type">
+                <option value="merit">Merit (Salary Increase)</option>
+                <option value="bonus">Bonus</option>
+                <option value="equity">Equity Refresh</option>
               </select>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Open Date</label>
-              <input class="form-input" type="date" value="2025-03-01" />
+              <input class="form-input" type="date" id="cycle-open" />
             </div>
             <div class="form-group">
               <label class="form-label">Close Date</label>
-              <input class="form-input" type="date" value="2025-04-15" />
+              <input class="form-input" type="date" id="cycle-close" />
             </div>
           </div>
           <div class="form-group">
             <label class="form-label">Effective Date</label>
-            <input class="form-input" type="date" value="2025-07-01" style="max-width:240px;" />
+            <input class="form-input" type="date" id="cycle-effective" style="max-width:240px;" />
             <div class="form-hint">The date when approved merit increases take effect in payroll.</div>
           </div>
         </div>
       </div>
 
-      <!-- Budget -->
+      <!-- ── Budget ─────────────────────────────────────────── -->
       <div class="card mb-20">
         <div class="card-header">
           <div class="card-title">Budget Configuration</div>
@@ -98,12 +188,12 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Total Payroll</label>
-              <input class="form-input" value="$40,000,000" />
+              <input class="form-input" id="total-payroll" placeholder="e.g. 40000000" />
             </div>
             <div class="form-group">
               <label class="form-label">Merit Budget %</label>
-              <input class="form-input" type="number" step="0.1" value="3.5" />
-              <div class="form-hint">Auto-calculates to $1,400,000 total budget.</div>
+              <input class="form-input" type="number" step="0.1" id="budget-pct" />
+              <div class="form-hint" id="budget-calc-hint"></div>
             </div>
           </div>
           <div class="form-group">
@@ -111,18 +201,18 @@
             <div class="form-row">
               <div>
                 <label class="form-label" style="font-weight:400; font-size:12px;">Minimum %</label>
-                <input class="form-input" type="number" value="0" />
+                <input class="form-input" type="number" id="guideline-min" />
               </div>
               <div>
                 <label class="form-label" style="font-weight:400; font-size:12px;">Maximum % (before approval required)</label>
-                <input class="form-input" type="number" value="10" />
+                <input class="form-input" type="number" id="guideline-max" />
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Approval workflow -->
+      <!-- ── Approval workflow ──────────────────────────────── -->
       <div class="card mb-20">
         <div class="card-header">
           <div class="card-title">Approval Workflow</div>
@@ -143,7 +233,7 @@
         </div>
       </div>
 
-      <!-- Eligible employees -->
+      <!-- ── Eligibility ────────────────────────────────────── -->
       <div class="card">
         <div class="card-header">
           <div class="card-title">Eligibility Rules</div>
@@ -166,21 +256,180 @@
         </div>
       </div>
 
-    </div>
-  </div>
-</div>
-<div id="toast"></div>
-<script>
-  const r = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', r);
-  document.querySelector('.role-switcher select').value = r;
+    </div><!-- /page-content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
 
-  function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
+<div id="toast"></div>
+
+<script src="js/store.js"></script>
+<script src="js/auth.js"></script>
+<script>
+
+Auth.requireAdmin(); // admin-only page
+
+// ── User Management ──────────────────────────────────────────
+function renderUsersTable() {
+  const users     = Store.getUsers();
+  const tbody     = document.getElementById('users-tbody');
+  const currentId = Auth.getUser()?.id;
+  const BADGE     = { admin:'badge-blue', manager:'badge-gray', exec:'badge-green' };
+  const LABEL     = { admin:'Admin', manager:'Manager', exec:'Executive' };
+
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--gray-400); padding:24px;">No users yet.</td></tr>`;
+    return;
   }
+
+  tbody.innerHTML = users.map(u => {
+    const isMe     = u.id === currentId;
+    const teamSize = u.role === 'manager' ? Store.getManagerTeamSize(u) : null;
+    const teamHtml = teamSize !== null
+      ? `<strong>${teamSize}</strong> <span style="font-size:11px; color:var(--gray-400);">employees</span>`
+      : '<span style="color:var(--gray-300);">—</span>';
+
+    return `
+      <tr>
+        <td>
+          <div class="employee-cell">
+            <div class="avatar" style="background:${u.avatarColor || '#4F46E5'}; width:32px; height:32px; font-size:12px;">${u.initials || '?'}</div>
+            <div>
+              <div class="employee-name">${u.name}${isMe ? ' <span style="font-size:11px; color:var(--gray-400); font-weight:400;">(you)</span>' : ''}</div>
+            </div>
+          </div>
+        </td>
+        <td style="color:var(--gray-500); font-size:13px;">${u.email}</td>
+        <td>
+          <select class="form-select" style="padding:5px 8px; font-size:12.5px; max-width:180px;"
+            onchange="updateUserRole('${u.id}', this.value)" ${isMe ? 'disabled title="Cannot change your own role"' : ''}>
+            <option value="admin"   ${u.role==='admin'   ? 'selected':''}>Admin — full access</option>
+            <option value="manager" ${u.role==='manager' ? 'selected':''}>Manager — own team</option>
+            <option value="exec"    ${u.role==='exec'    ? 'selected':''}>Executive — read-only</option>
+          </select>
+        </td>
+        <td style="text-align:center;">${teamHtml}</td>
+        <td class="actions">
+          ${!isMe
+            ? `<button class="btn btn-ghost btn-sm" style="color:var(--red-600);"
+                 onclick="removeUser('${u.id}')">Remove</button>`
+            : ''}
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function toggleAddUserForm() {
+  const form = document.getElementById('add-user-form');
+  const open = form.style.display !== 'none';
+  form.style.display = open ? 'none' : '';
+  if (!open) {
+    document.getElementById('new-user-name').value  = '';
+    document.getElementById('new-user-email').value = '';
+    document.getElementById('new-user-role').value  = 'manager';
+    document.getElementById('new-user-name').focus();
+  }
+}
+
+function addUser() {
+  const name  = document.getElementById('new-user-name').value.trim();
+  const email = document.getElementById('new-user-email').value.trim();
+  const role  = document.getElementById('new-user-role').value;
+
+  if (!name)                          { showToast('Name is required'); return; }
+  if (!email || !email.includes('@')) { showToast('Valid email is required'); return; }
+  if (Store.getUserByEmail(email))    { showToast('An account with that email already exists'); return; }
+
+  Store.addUser({ name, email, role });
+  document.getElementById('add-user-form').style.display = 'none';
+  renderUsersTable();
+  showToast(`Added ${name} as ${role}`);
+}
+
+function updateUserRole(id, newRole) {
+  Store.updateUser(id, { role: newRole });
+  renderUsersTable();
+  showToast('Role updated');
+}
+
+function removeUser(id) {
+  const user = Store.getUserById(id);
+  if (!user) return;
+  if (!confirm(`Remove ${user.name} from MeritCycle? They will no longer be able to sign in.`)) return;
+  Store.removeUser(id);
+  renderUsersTable();
+  showToast(`Removed ${user.name}`);
+}
+
+// ── Cycle settings ───────────────────────────────────────────
+function loadCycleForm() {
+  const c = Store.getCycle();
+  document.getElementById('cycle-name').value      = c.name       || '';
+  document.getElementById('cycle-type').value      = c.type       || 'merit';
+  document.getElementById('cycle-open').value      = c.openDate   || '';
+  document.getElementById('cycle-close').value     = c.closeDate  || '';
+  document.getElementById('cycle-effective').value = c.effectiveDate || '';
+  document.getElementById('total-payroll').value   = c.totalPayroll || '';
+  document.getElementById('budget-pct').value      = c.budgetPct  || '';
+  document.getElementById('guideline-min').value   = c.guidelineMin ?? 0;
+  document.getElementById('guideline-max').value   = c.guidelineMax ?? 10;
+  updateBudgetHint();
+}
+
+function updateBudgetHint() {
+  const payroll = parseFloat(String(document.getElementById('total-payroll').value).replace(/[$,]/g,''));
+  const pct     = parseFloat(document.getElementById('budget-pct').value);
+  const hint    = document.getElementById('budget-calc-hint');
+  if (payroll > 0 && pct > 0) {
+    hint.textContent = `= $${Math.round(payroll * pct / 100).toLocaleString()} total budget`;
+  } else {
+    hint.textContent = '';
+  }
+}
+
+document.getElementById('total-payroll').addEventListener('input', updateBudgetHint);
+document.getElementById('budget-pct').addEventListener('input', updateBudgetHint);
+
+function saveSettings() {
+  const payroll = parseFloat(String(document.getElementById('total-payroll').value).replace(/[$,]/g,'')) || 0;
+  const pct     = parseFloat(document.getElementById('budget-pct').value) || 0;
+  Store.setCycle({
+    name:         document.getElementById('cycle-name').value.trim(),
+    type:         document.getElementById('cycle-type').value,
+    openDate:     document.getElementById('cycle-open').value,
+    closeDate:    document.getElementById('cycle-close').value,
+    effectiveDate:document.getElementById('cycle-effective').value,
+    totalPayroll: payroll,
+    budgetPct:    pct,
+    budgetTotal:  Math.round(payroll * pct / 100),
+    guidelineMin: parseFloat(document.getElementById('guideline-min').value) || 0,
+    guidelineMax: parseFloat(document.getElementById('guideline-max').value) || 10,
+    status:       'open',
+  });
+  showToast('Settings saved');
+}
+
+function discardSettings() {
+  loadCycleForm();
+  showToast('Changes discarded');
+}
+
+// ── Toast ────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Init ─────────────────────────────────────────────────────
+(function init() {
+  Auth.applyUI();
+  const cycle = Store.getCycle();
+  document.getElementById('sb-cycle-name').textContent = cycle.name || '2025 Annual Merit Cycle';
+  loadCycleForm();
+  renderUsersTable();
+})();
+
 </script>
 </body>
 </html>

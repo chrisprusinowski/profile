@@ -1252,3 +1252,202 @@ body[data-role="exec"]    .show-exec.flex-display { display: flex !important; }
   margin: 0 auto 24px;
   line-height: 1.6;
 }
+
+/* ============================================================
+   AUTH — LOGIN PAGE
+   ============================================================ */
+
+.login-body {
+  background: var(--blue-900);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-wrap {
+  width: 420px;
+  max-width: 100%;
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+  justify-content: center;
+}
+
+.login-logo .logo-icon {
+  width: 48px; height: 48px;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.login-logo .logo-text { color: #fff; }
+.login-logo .logo-sub  { color: rgba(255,255,255,.5); }
+
+.login-card {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  padding: 28px 28px 24px;
+}
+
+.login-card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 6px;
+}
+
+.login-card-sub {
+  font-size: 13.5px;
+  color: var(--gray-500);
+  margin-bottom: 22px;
+  line-height: 1.5;
+}
+
+.login-divider {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-400);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  position: relative;
+  margin: 4px 0 12px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 0;
+  width: calc(50% - 70px);
+  height: 1px;
+  background: var(--gray-200);
+}
+
+.login-divider::after { left: auto; right: 0; }
+
+/* ── User pick list ─────────────────────────────────────────── */
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: white;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  transition: border-color .15s, background .15s;
+}
+
+.user-card:hover {
+  border-color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.user-card-info   { flex: 1; min-width: 0; }
+.user-card-name   { font-size: 13.5px; font-weight: 600; color: var(--gray-800); }
+.user-card-email  { font-size: 12px; color: var(--gray-400); }
+
+/* ============================================================
+   AUTH — SIDEBAR USER DISPLAY  (replaces .role-switcher)
+   ============================================================ */
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 4px;
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+
+.avatar-sm {
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 12px !important;
+  flex-shrink: 0;
+}
+
+.sidebar-user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-user-role {
+  font-size: 11px;
+  color: rgba(255,255,255,.45);
+  margin-top: 1px;
+}
+
+.btn-sign-out {
+  background: none;
+  border: 1px solid rgba(255,255,255,.15);
+  color: rgba(255,255,255,.45);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+
+.btn-sign-out:hover {
+  border-color: rgba(255,255,255,.35);
+  color: rgba(255,255,255,.85);
+}
+
+/* Admin preview-as row */
+.admin-preview-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.35);
+  white-space: nowrap;
+}
+
+.admin-preview-row select {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.8);
+  outline: none;
+  cursor: pointer;
+}
+
+.admin-preview-row select option { background: #1e3a8a; }
