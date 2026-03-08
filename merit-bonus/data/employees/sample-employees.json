@@ -1,0 +1,32 @@
+[
+  {
+    "id": "emp-1001",
+    "name": "Alex Morgan",
+    "salary": 145000,
+    "department": "Engineering",
+    "title": "Senior Software Engineer",
+    "manager": "Jamie Rivera",
+    "managerUserId": "user-mgr-001",
+    "hireDate": "2021-03-15"
+  },
+  {
+    "id": "emp-1002",
+    "name": "Priya Nair",
+    "salary": 132000,
+    "department": "Engineering",
+    "title": "Software Engineer II",
+    "manager": "Jamie Rivera",
+    "managerUserId": "user-mgr-001",
+    "hireDate": "2022-06-01"
+  },
+  {
+    "id": "emp-1003",
+    "name": "Brianna Scott",
+    "salary": 130000,
+    "department": "Product",
+    "title": "Product Manager",
+    "manager": "Jordan Pike",
+    "managerUserId": "user-mgr-010",
+    "hireDate": "2020-07-01"
+  }
+]

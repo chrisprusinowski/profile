@@ -30,7 +30,7 @@
     <div class="sidebar-footer">
       <div class="role-switcher">
         <label>Viewing as</label>
-        <select onchange="localStorage.setItem('mc_role',this.value); document.body.setAttribute('data-role',this.value)">
+        <select>
           <option value="hr">HR / Comp Admin</option>
           <option value="manager">Manager</option>
           <option value="exec">Executive</option>
@@ -139,8 +139,9 @@
   </div>
 </div>
 <script src="js/store.js"></script>
+<script src="js/role-ui.js"></script>
 <script>
-  let allEmployees = Store.getEmployees();
+  let allEmployees = Store.getVisibleEmployees();
 
   const elems = {
     roleSelect: document.querySelector('.role-switcher select'),
@@ -160,7 +161,7 @@
   };
 
   function refreshEmployees() {
-    allEmployees = Store.getEmployees();
+    allEmployees = Store.getVisibleEmployees();
   }
 
   function openAddEmployeeModal() {
@@ -278,14 +279,7 @@
   }
 
   (function init() {
-    const role = localStorage.getItem('mc_role') || 'hr';
-    document.body.setAttribute('data-role', role);
-    elems.roleSelect.value = role;
-
-    elems.roleSelect.addEventListener('change', function () {
-      localStorage.setItem('mc_role', this.value);
-      document.body.setAttribute('data-role', this.value);
-    });
+    RoleUI.init();
 
     elems.search.addEventListener('input', updateView);
     elems.department.addEventListener('change', updateView);

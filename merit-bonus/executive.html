@@ -30,7 +30,7 @@
     <div class="sidebar-footer">
       <div class="role-switcher">
         <label>Viewing as</label>
-        <select onchange="localStorage.setItem('mc_role',this.value); document.body.setAttribute('data-role',this.value)">
+        <select>
           <option value="hr">HR / Comp Admin</option>
           <option value="manager">Manager</option>
           <option value="exec" selected>Executive</option>
@@ -157,6 +157,7 @@
   </div>
 </div>
 <script src="js/store.js"></script>
+<script src="js/role-ui.js"></script>
 <script>
   function fmt(n) { return '$' + Math.round(n || 0).toLocaleString(); }
   function fmtK(n) {
@@ -165,12 +166,10 @@
     return '$' + Math.round(n || 0);
   }
 
-  const r = localStorage.getItem('mc_role') || 'exec';
-  document.body.setAttribute('data-role', r);
-  document.querySelector('.role-switcher select').value = r;
+  RoleUI.init();
 
   (function initExecutive() {
-    if (!Store.hasEmployees()) {
+    if (!Store.getVisibleEmployees().length) {
       const content = document.querySelector('.page-content');
       const banner = document.createElement('div');
       banner.className = 'alert alert-blue';
@@ -182,7 +181,7 @@
       content.insertBefore(banner, content.firstChild);
     }
 
-    const employees = Store.getEmployees();
+    const employees = Store.getVisibleEmployees();
     const summary = Store.getBudgetSummary();
     const planning = Store.getPlanningSummary();
     const counts = Store.getStatusCounts();

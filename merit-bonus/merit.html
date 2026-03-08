@@ -38,7 +38,7 @@
     <div class="sidebar-footer">
       <div class="role-switcher">
         <label>Viewing as</label>
-        <select onchange="switchRole(this.value)">
+        <select>
           <option value="hr">HR / Comp Admin</option>
           <option value="manager">Manager</option>
           <option value="exec">Executive</option>
@@ -188,6 +188,7 @@
 <div id="toast"></div>
 
 <script src="js/store.js"></script>
+<script src="js/role-ui.js"></script>
 <script>
 
 // ── State ─────────────────────────────────────────────────────
@@ -231,7 +232,7 @@ function showEmptyState() {
 
 // ── Render table ──────────────────────────────────────────────
 function renderTable() {
-  const employees = Store.getEmployees();
+  const employees = Store.getVisibleEmployees();
   if (!employees.length) { showEmptyState(); return; }
 
   const recs         = Store.getRecommendations();
@@ -346,7 +347,7 @@ let _modalSalary = 0;
 
 function openModal(id) {
   editingId = id;
-  const employees = Store.getEmployees();
+  const employees = Store.getVisibleEmployees();
   const e         = employees.find(x => x.id === id);
   if (!e) return;
   const rec = Store.getRecommendation(id);
@@ -405,7 +406,7 @@ function saveModal() {
 
   Store.setRecommendation(editingId, { meritPct: clamped, rating, notes, status: newStatus });
 
-  const e = Store.getEmployees().find(x => x.id === editingId);
+  const e = Store.getVisibleEmployees().find(x => x.id === editingId);
   closeModal();
   renderTable();
   showToast(`Saved — ${e.name}`);
@@ -415,14 +416,14 @@ function saveModal() {
 function submitAll() {
   const counts = Store.getStatusCounts();
   if (counts.Draft === 0) { showToast('No draft recommendations to submit'); return; }
-  Store.submitAll();
+  Store.submitForEmployees(Store.getVisibleEmployees().map((e) => e.id));
   renderTable();
   showToast(`${counts.Draft} draft recommendation${counts.Draft !== 1 ? 's' : ''} submitted`);
 }
 
 // ── Export CSV ────────────────────────────────────────────────
 function exportCSV() {
-  const employees = Store.getEmployees();
+  const employees = Store.getVisibleEmployees();
   if (!employees.length) { showToast('No data to export'); return; }
 
   const recs = Store.getRecommendations();
@@ -452,12 +453,6 @@ function exportCSV() {
   showToast('Exported merit-recommendations.csv');
 }
 
-// ── Role ──────────────────────────────────────────────────────
-function switchRole(role) {
-  localStorage.setItem('mc_role', role);
-  document.body.setAttribute('data-role', role);
-}
-
 // ── Toast ─────────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -469,9 +464,7 @@ function showToast(msg) {
 // ── Init ──────────────────────────────────────────────────────
 (function init() {
   // Role
-  const role = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', role);
-  document.querySelector('.role-switcher select').value = role;
+  RoleUI.init();
 
   // Cycle name
   const cycle = Store.getCycle();

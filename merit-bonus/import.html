@@ -38,7 +38,7 @@
     <div class="sidebar-footer">
       <div class="role-switcher">
         <label>Viewing as</label>
-        <select onchange="switchRole(this.value)">
+        <select>
           <option value="hr" selected>HR / Comp Admin</option>
           <option value="manager">Manager</option>
           <option value="exec">Executive</option>
@@ -180,6 +180,7 @@ Carlos Vega,Sales,Account Executive,95000,Aisha Kofi,carlos@company.com,2022-01-
 <div id="toast"></div>
 
 <script src="js/store.js"></script>
+<script src="js/role-ui.js"></script>
 <script src="js/csv.js"></script>
 <script>
 
@@ -422,12 +423,7 @@ function goToStep(n) {
   document.getElementById('conn-2').className = 'step-connector' + (n > 2 ? ' done' : '');
 }
 
-// ── Role + init ──────────────────────────────────────────────────
-function switchRole(role) {
-  localStorage.setItem('mc_role', role);
-  document.body.setAttribute('data-role', role);
-}
-
+// ── Init ──────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -436,9 +432,7 @@ function showToast(msg) {
 }
 
 (function init() {
-  const role = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', role);
-  document.querySelector('.role-switcher select').value = role;
+  RoleUI.init();
 
   // Show existing employee count warning if data already exists
   const count = Store.getEmployees().length;

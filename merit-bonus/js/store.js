@@ -31,12 +31,63 @@ const Store = (() => {
     departments: {},
   };
 
+  const DEFAULT_USERS = [
+    { id: 'user-hr-001', name: 'Taylor Brooks', role: 'hr', title: 'Compensation Admin' },
+    { id: 'user-mgr-001', name: 'Jamie Rivera', role: 'manager', title: 'Engineering Manager' },
+    { id: 'user-exec-001', name: 'Morgan Lee', role: 'exec', title: 'VP, Product & Engineering', departments: ['Engineering', 'Product'] },
+  ];
+
+  const DEFAULT_EMPLOYEES = [
+    { id: 'emp-1001', name: 'Alex Morgan', salary: 145000, department: 'Engineering', title: 'Senior Software Engineer', manager: 'Jamie Rivera', managerUserId: 'user-mgr-001', hireDate: '2021-03-15' },
+    { id: 'emp-1002', name: 'Priya Nair', salary: 132000, department: 'Engineering', title: 'Software Engineer II', manager: 'Jamie Rivera', managerUserId: 'user-mgr-001', hireDate: '2022-06-01' },
+    { id: 'emp-1003', name: 'Brianna Scott', salary: 130000, department: 'Product', title: 'Product Manager', manager: 'Jordan Pike', managerUserId: 'user-mgr-010', hireDate: '2020-07-01' },
+    { id: 'emp-1004', name: 'Carlos Vega', salary: 95000, department: 'Sales', title: 'Account Executive', manager: 'Aisha Kofi', managerUserId: 'user-mgr-020', hireDate: '2022-01-10' },
+    { id: 'emp-1005', name: 'Dana Kim', salary: 118000, department: 'Engineering', title: 'QA Engineer', manager: 'Jamie Rivera', managerUserId: 'user-mgr-001', hireDate: '2019-11-19' },
+  ];
+
+  function roleKey() { return localStorage.getItem('mc_role') || 'hr'; }
+
   return {
+
+    initDemoData() {
+      if (!(get('employees') || []).length) set('employees', DEFAULT_EMPLOYEES);
+      if (!(get('users') || []).length) set('users', DEFAULT_USERS);
+      if (!localStorage.getItem('mc_role')) localStorage.setItem('mc_role', 'hr');
+      if (!localStorage.getItem('mc_activeUserId')) localStorage.setItem('mc_activeUserId', 'user-hr-001');
+    },
 
     // ── Employees ───────────────────────────────────────────────
     getEmployees()    { return get('employees') || []; },
     setEmployees(arr) { set('employees', arr); },
     hasEmployees()    { return (get('employees') || []).length > 0; },
+    getVisibleEmployees() {
+      const role = roleKey();
+      const employees = this.getEmployees();
+      if (role === 'hr') return employees;
+      if (role === 'manager') {
+        const activeUserId = localStorage.getItem('mc_activeUserId');
+        return employees.filter((e) => e.managerUserId === activeUserId);
+      }
+      if (role === 'exec') {
+        const user = this.getCurrentUser();
+        const departments = user?.departments || [];
+        if (!departments.length) return employees;
+        return employees.filter((e) => departments.includes(e.department));
+      }
+      return employees;
+    },
+
+    // ── Users / roles ───────────────────────────────────────────
+    getUsers() { return get('users') || []; },
+    getUsersByRole(role) { return this.getUsers().filter((u) => u.role === role); },
+    getCurrentRole() { return roleKey(); },
+    setCurrentRole(role) { localStorage.setItem('mc_role', role); },
+    getCurrentUser() {
+      const users = this.getUsersByRole(roleKey());
+      const currentId = localStorage.getItem('mc_activeUserId');
+      return users.find((u) => u.id === currentId) || users[0] || null;
+    },
+    setCurrentUser(id) { localStorage.setItem('mc_activeUserId', id); },
 
     // ── Cycle config ────────────────────────────────────────────
     getCycle()        { return get('cycle') || { ...DEFAULT_CYCLE }; },
@@ -150,7 +201,12 @@ const Store = (() => {
 
     // Mark all Draft recs as Submitted
     submitAll() {
-      const employees = get('employees') || [];
+      this.submitForEmployees((get('employees') || []).map((e) => e.id));
+    },
+
+    submitForEmployees(employeeIds = []) {
+      const idSet = new Set(employeeIds);
+      const employees = (get('employees') || []).filter((e) => idSet.has(e.id));
       const recs      = get('recommendations') || {};
       employees.forEach(e => {
         const r = recs[e.id] || {};
