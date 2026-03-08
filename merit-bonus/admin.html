@@ -30,7 +30,7 @@
     <div class="sidebar-footer">
       <div class="role-switcher">
         <label>Viewing as</label>
-        <select onchange="localStorage.setItem('mc_role',this.value); document.body.setAttribute('data-role',this.value)">
+        <select>
           <option value="hr" selected>HR / Comp Admin</option>
           <option value="manager">Manager</option>
           <option value="exec">Executive</option>
@@ -214,10 +214,9 @@
 </div>
 <div id="toast"></div>
 <script src="js/store.js"></script>
+<script src="js/role-ui.js"></script>
 <script>
-  const r = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', r);
-  document.querySelector('.role-switcher select').value = r;
+  RoleUI.init();
 
   function showToast(msg) {
     const t = document.getElementById('toast');

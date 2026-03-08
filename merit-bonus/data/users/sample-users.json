@@ -1,0 +1,5 @@
+[
+  { "id": "user-hr-001", "name": "Taylor Brooks", "role": "hr", "title": "Compensation Admin" },
+  { "id": "user-mgr-001", "name": "Jamie Rivera", "role": "manager", "title": "Engineering Manager" },
+  { "id": "user-exec-001", "name": "Morgan Lee", "role": "exec", "title": "VP, Product & Engineering", "departments": ["Engineering", "Product"] }
+]

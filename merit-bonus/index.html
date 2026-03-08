@@ -57,7 +57,7 @@
     <div class="sidebar-footer">
       <div class="role-switcher">
         <label>Viewing as</label>
-        <select onchange="document.body.setAttribute('data-role', this.value)">
+        <select>
           <option value="hr" selected>HR / Comp Admin</option>
           <option value="manager">Manager</option>
           <option value="exec">Executive</option>
@@ -234,6 +234,7 @@
 <div id="toast"></div>
 
 <script src="js/store.js"></script>
+<script src="js/role-ui.js"></script>
 <script>
   function fmt(n) { return '$' + Math.round(n).toLocaleString(); }
   function fmtK(n) {
@@ -274,16 +275,9 @@
 
   (function init() {
     // Role
-    const role = localStorage.getItem('mc_role') || 'hr';
-    document.body.setAttribute('data-role', role);
-    document.querySelector('.role-switcher select').value = role;
+    RoleUI.init();
 
-    document.querySelector('.role-switcher select').addEventListener('change', function() {
-      localStorage.setItem('mc_role', this.value);
-      document.body.setAttribute('data-role', this.value);
-    });
-
-    if (!Store.hasEmployees()) {
+    if (!Store.getVisibleEmployees().length) {
       // Show import prompt banner at the top of the page
       const content = document.querySelector('.page-content');
       const banner  = document.createElement('div');
@@ -310,7 +304,7 @@
     }
 
     // ── Live metrics from store ────────────────────────────────
-    const employees = Store.getEmployees();
+    const employees = Store.getVisibleEmployees();
     const cycle     = Store.getCycle();
     const planning  = Store.getPlanningSummary();
     const financeRows = planning.financeModel.rows;
