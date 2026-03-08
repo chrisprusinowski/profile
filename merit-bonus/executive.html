@@ -20,7 +20,7 @@
     <nav class="sidebar-nav">
       <div class="nav-section-label">Cycle</div>
       <a href="index.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
-      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge">7</span></a>
+      <a href="merit.html" class="nav-item"><span class="nav-icon">↑</span> Merit Recommendations <span class="nav-badge" id="exec-nav-flagged">0</span></a>
       <a href="employees.html" class="nav-item"><span class="nav-icon">◎</span> Employee Roster</a>
       <div class="nav-section-label">Reports</div>
       <a href="executive.html" class="nav-item active"><span class="nav-icon">◈</span> Executive Summary</a>
@@ -54,27 +54,27 @@
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-icon blue">$</div>
-          <div class="metric-label">Total Merit Budget</div>
+          <div class="metric-label">Cycle Budget</div>
           <div class="metric-value">$1.4M</div>
-          <div class="metric-sub">3.5% of payroll</div>
+          <div class="metric-sub">Configured cycle budget</div>
         </div>
         <div class="metric-card">
           <div class="metric-icon green">↑</div>
           <div class="metric-label">Avg Merit Increase</div>
-          <div class="metric-value">3.6%</div>
-          <div class="metric-sub">vs. 3.1% last year</div>
+          <div class="metric-value" id="metric-avg-merit">3.6%</div>
+          <div class="metric-sub" id="metric-avg-merit-sub">vs. 3.1% last year</div>
         </div>
         <div class="metric-card">
           <div class="metric-icon amber">◎</div>
           <div class="metric-label">Employees in Cycle</div>
-          <div class="metric-value">142</div>
-          <div class="metric-sub">61% recommendations in</div>
+          <div class="metric-value" id="metric-employee-count">142</div>
+          <div class="metric-sub" id="metric-employee-count-sub">61% recommendations in</div>
         </div>
         <div class="metric-card">
           <div class="metric-icon red">⚑</div>
           <div class="metric-label">Exceptions (>10%)</div>
-          <div class="metric-value">3</div>
-          <div class="metric-sub">Require approval</div>
+          <div class="metric-value" id="metric-flagged-count">3</div>
+          <div class="metric-sub" id="metric-flagged-count-sub">Require approval</div>
         </div>
       </div>
 
@@ -85,57 +85,35 @@
             <div class="card-title">Merit Distribution by Department</div>
           </div>
           <div class="card-body">
-            <div class="bar-chart">
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Engineering</div>
-                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:82%; background:#2563EB;"></div></div>
-                <div class="bar-chart-val">3.8% avg</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Sales</div>
-                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:91%; background:#7C3AED;"></div></div>
-                <div class="bar-chart-val">5.2% avg</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Product</div>
-                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:70%; background:#0891B2;"></div></div>
-                <div class="bar-chart-val">3.5% avg</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Operations</div>
-                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:55%; background:#059669;"></div></div>
-                <div class="bar-chart-val">2.8% avg</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Finance</div>
-                <div class="bar-chart-bar-wrap"><div class="bar-chart-bar" style="width:45%; background:#D97706;"></div></div>
-                <div class="bar-chart-val">2.5% avg</div>
-              </div>
-            </div>
+            <div class="bar-chart" id="department-distribution-chart"></div>
+            <div id="department-distribution-empty" class="text-muted" style="display:none; font-size:13px;">No department data available yet.</div>
           </div>
         </div>
 
         <!-- Budget status -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Budget Status</div>
+            <div class="card-title">Budget Status (Cycle vs Finance Model)</div>
           </div>
           <div class="card-body">
             <div style="text-align:center; padding: 10px 0 20px;">
-              <div style="font-size:42px; font-weight:800; color:var(--green-600);">70%</div>
-              <div style="font-size:13px; color:var(--gray-500); margin-top:4px;">of budget allocated</div>
+              <div id="budget-allocated-pct" style="font-size:42px; font-weight:800; color:var(--green-600);">70%</div>
+              <div id="budget-allocated-subtext" style="font-size:13px; color:var(--gray-500); margin-top:4px;">of budget allocated</div>
             </div>
             <div class="progress-bar" style="height:12px; margin-bottom:20px;">
-              <div class="progress-fill green" style="width:70%"></div>
+              <div class="progress-fill green" id="budget-progress-fill" style="width:70%"></div>
             </div>
             <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
               <div style="display:flex; justify-content:space-between;">
-                <span class="text-muted">Total Budget</span><span class="fw-700">$1,400,000</span>
+                <span class="text-muted">Cycle Budget</span><span class="fw-700">$1,400,000</span>
               </div>
               <div style="display:flex; justify-content:space-between;">
+                <span class="text-muted">Finance Model Budget</span><span class="fw-700" id="finance-model-budget">$0</span>
+              </div>
+              <div id="budget-row-allocated" style="display:flex; justify-content:space-between;">
                 <span class="text-muted">Allocated</span><span class="fw-700" style="color:var(--green-600);">$980,000</span>
               </div>
-              <div style="display:flex; justify-content:space-between;">
+              <div id="budget-row-remaining" style="display:flex; justify-content:space-between;">
                 <span class="text-muted">Remaining</span><span class="fw-700">$420,000</span>
               </div>
             </div>
@@ -152,36 +130,115 @@
         <div class="card-body">
           <div style="display:flex; gap:24px; margin-bottom:16px;">
             <div style="flex:1; text-align:center;">
-              <div style="font-size:28px; font-weight:800; color:var(--green-600);">11</div>
+              <div id="cycle-submitted" style="font-size:28px; font-weight:800; color:var(--green-600);">11</div>
               <div style="font-size:12px; color:var(--gray-500);">Submitted</div>
             </div>
             <div style="flex:1; text-align:center;">
-              <div style="font-size:28px; font-weight:800; color:var(--amber-600);">4</div>
+              <div id="cycle-in-progress" style="font-size:28px; font-weight:800; color:var(--amber-600);">4</div>
               <div style="font-size:12px; color:var(--gray-500);">In Progress</div>
             </div>
             <div style="flex:1; text-align:center;">
-              <div style="font-size:28px; font-weight:800; color:var(--gray-400);">3</div>
+              <div id="cycle-not-started" style="font-size:28px; font-weight:800; color:var(--gray-400);">3</div>
               <div style="font-size:12px; color:var(--gray-500);">Not Started</div>
             </div>
             <div style="flex:1; text-align:center;">
-              <div style="font-size:28px; font-weight:800; color:var(--red-600);">3</div>
+              <div id="cycle-flagged" style="font-size:28px; font-weight:800; color:var(--red-600);">3</div>
               <div style="font-size:12px; color:var(--gray-500);">Flagged</div>
             </div>
           </div>
           <div class="progress-bar" style="height:10px;">
-            <div style="height:100%; border-radius:99px; background: linear-gradient(90deg, var(--green-600) 61%, var(--amber-600) 61% 83%, var(--gray-200) 83%);"></div>
+            <div id="cycle-progress-fill" style="height:100%; border-radius:99px; background: linear-gradient(90deg, var(--green-600) 61%, var(--amber-600) 61% 83%, var(--gray-200) 83%);"></div>
           </div>
-          <div style="font-size:12px; color:var(--gray-500); margin-top:8px; text-align:right;">61% complete — 14 days remaining</div>
+          <div id="cycle-progress-subtext" style="font-size:12px; color:var(--gray-500); margin-top:8px; text-align:right;">61% complete — 14 days remaining</div>
         </div>
       </div>
 
     </div>
   </div>
 </div>
+<script src="js/store.js"></script>
 <script>
+  function fmt(n) { return '$' + Math.round(n || 0).toLocaleString(); }
+  function fmtK(n) {
+    if (Math.abs(n) >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
+    if (Math.abs(n) >= 1000)    return '$' + Math.round(n / 1000) + 'K';
+    return '$' + Math.round(n || 0);
+  }
+
   const r = localStorage.getItem('mc_role') || 'exec';
   document.body.setAttribute('data-role', r);
   document.querySelector('.role-switcher select').value = r;
+
+  (function initExecutive() {
+    if (!Store.hasEmployees()) {
+      const content = document.querySelector('.page-content');
+      const banner = document.createElement('div');
+      banner.className = 'alert alert-blue';
+      banner.style.cssText = 'margin-bottom:20px; align-items:center;';
+      banner.innerHTML = `
+        <div class="alert-icon" style="font-size:20px;">⬆</div>
+        <div style="flex:1;"><strong>No employees imported yet.</strong> Executive metrics will populate after employee CSV import.</div>
+        <a href="import.html" class="btn btn-primary btn-sm" style="margin-left:12px; white-space:nowrap;">Import CSV →</a>`;
+      content.insertBefore(banner, content.firstChild);
+    }
+
+    const employees = Store.getEmployees();
+    const summary = Store.getBudgetSummary();
+    const planning = Store.getPlanningSummary();
+    const counts = Store.getStatusCounts();
+    const cycle = Store.getCycle();
+    const recs = Store.getRecommendations();
+
+    const cards = document.querySelectorAll('.metric-card');
+    cards[0].querySelector('.metric-value').textContent = fmtK(planning.cycleBudget.budgetTotal);
+    cards[0].querySelector('.metric-sub').textContent = `${planning.cycleBudget.budgetPct.toFixed(1)}% configured cycle budget`;
+
+    const avgPct = summary.avgPct || 0;
+    cards[1].querySelector('.metric-value').textContent = `${avgPct.toFixed(1)}%`;
+    const financeMeritPct = planning.financeModel.totalPayroll ? (planning.financeModel.meritBudgetTotal / planning.financeModel.totalPayroll) * 100 : 0;
+    cards[1].querySelector('.metric-sub').textContent = `Finance model assumption: ${financeMeritPct.toFixed(1)}%`;
+
+    const submitted = counts.Submitted + counts.Approved + counts.Flagged;
+    const total = employees.length;
+    const pctComplete = total ? Math.round((submitted / total) * 100) : 0;
+    cards[2].querySelector('.metric-value').textContent = total;
+    cards[2].querySelector('.metric-sub').textContent = `${pctComplete}% recommendations in`;
+
+    let exceptions = 0;
+    employees.forEach(e => {
+      const pct = Number(recs[e.id]?.meritPct) || 0;
+      if (pct > (cycle.guidelineMax || 10)) exceptions += 1;
+    });
+    cards[3].querySelector('.metric-value').textContent = exceptions;
+
+    const budgetRows = document.querySelectorAll('.card-body .fw-700');
+    if (budgetRows[0]) budgetRows[0].textContent = fmt(planning.cycleBudget.budgetTotal);
+    const financeBudgetEl = document.getElementById('finance-model-budget');
+    if (financeBudgetEl) financeBudgetEl.textContent = fmt(planning.financeModel.meritBudgetTotal);
+    if (budgetRows[1]) budgetRows[1].textContent = fmt(summary.allocated);
+    if (budgetRows[2]) budgetRows[2].textContent = fmt(summary.remaining);
+
+    const pctUsed = planning.cycleBudget.budgetTotal ? Math.min((summary.allocated / planning.cycleBudget.budgetTotal) * 100, 100) : 0;
+    document.querySelector('.progress-fill.green').style.width = `${pctUsed}%`;
+    document.querySelector('.card-body div[style*="font-size:42px"]').textContent = `${Math.round(pctUsed)}%`;
+
+    // Assumption-driven view: department bars use finance model percentages/budgets
+    const rows = planning.financeModel.rows;
+    const chartRows = document.querySelectorAll('.bar-chart .bar-chart-row');
+    const maxPct = Math.max(...rows.map(row => row.meritPct), 0);
+    chartRows.forEach((el, idx) => {
+      const row = rows[idx];
+      if (!row) {
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = '';
+      el.querySelector('.bar-chart-label').textContent = row.department;
+      el.querySelector('.bar-chart-val').textContent = `${row.meritPct.toFixed(1)}% / ${fmtK(row.meritBudget)}`;
+      const width = maxPct ? Math.max((row.meritPct / maxPct) * 100, 10) : 0;
+      el.querySelector('.bar-chart-bar').style.width = `${width}%`;
+    });
+  })();
 </script>
 </body>
 </html>

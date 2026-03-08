@@ -42,39 +42,264 @@
     <header class="topbar">
       <div class="topbar-left">
         <div class="page-title">Employee Roster</div>
-        <div class="page-subtitle">142 employees in cycle</div>
+        <div class="page-subtitle" id="employee-count-subtitle">0 employees in cycle</div>
       </div>
       <div class="topbar-right">
         <button class="btn btn-secondary btn-sm">⬇ Export</button>
-        <button class="btn btn-primary btn-sm">+ Add Employee</button>
+        <button id="add-employee-btn" class="btn btn-primary btn-sm">+ Add Employee</button>
       </div>
     </header>
     <div class="page-content">
-      <div class="alert alert-blue" style="margin-bottom:24px;">
-        <div class="alert-icon">ℹ</div>
-        <div>Employee Roster is coming soon. This page will show full headcount, job levels, comp bands, and eligibility rules for the active cycle.</div>
+      <div class="toolbar" id="employee-filters">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input id="employee-search" type="search" placeholder="Search by name, manager, title, or department" />
+        </div>
+        <select id="department-filter" class="filter-select">
+          <option value="">All departments</option>
+        </select>
       </div>
+
       <div class="card">
         <div class="card-header">
-          <div class="card-title">Coming in next release</div>
+          <div>
+            <div class="card-title">Employees</div>
+            <div class="card-subtitle" id="table-subtitle">Showing 0 employees</div>
+          </div>
         </div>
-        <div class="card-body">
-          <ul style="list-style:none; display:flex; flex-direction:column; gap:12px;">
-            <li>✦ &nbsp;Full employee list with current salary, job level, and comp band</li>
-            <li>✦ &nbsp;Eligibility flags (new hires, PIPs, recent promotions)</li>
-            <li>✦ &nbsp;Department and manager hierarchy view</li>
-            <li>✦ &nbsp;Bulk import via CSV</li>
-            <li>✦ &nbsp;HRIS integration (Workday, BambooHR, Rippling)</li>
-          </ul>
+        <div class="card-body" style="padding:0;">
+          <div id="employee-empty" class="empty-state" style="display:none;">
+            <div class="empty-state-icon">👥</div>
+            <div class="empty-state-title">No employees found</div>
+            <div class="empty-state-sub" id="empty-state-message">Import your employee roster to begin planning merit increases for this cycle.</div>
+            <a href="import.html" class="btn btn-primary">Import Employees →</a>
+          </div>
+          <div id="employee-table-wrap" style="overflow-x:auto; display:none;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Department</th>
+                  <th>Title</th>
+                  <th class="numeric">Salary</th>
+                  <th>Manager</th>
+                  <th>Hire Date</th>
+                </tr>
+              </thead>
+              <tbody id="employee-table-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="add-employee-modal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add Employee</div>
+      <button class="modal-close" id="add-employee-close" aria-label="Close add employee form">✕</button>
+    </div>
+    <form class="modal-body" id="add-employee-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="new-employee-name">Name</label>
+          <input class="form-input" id="new-employee-name" name="name" required placeholder="Jane Smith" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-employee-salary">Salary</label>
+          <input class="form-input" id="new-employee-salary" name="salary" type="number" min="0" step="1" required placeholder="90000" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="new-employee-department">Department</label>
+          <input class="form-input" id="new-employee-department" name="department" placeholder="Engineering" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-employee-title">Title</label>
+          <input class="form-input" id="new-employee-title" name="title" placeholder="Software Engineer" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="new-employee-manager">Manager</label>
+          <input class="form-input" id="new-employee-manager" name="manager" placeholder="Alex Chen" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-employee-hire-date">Hire Date</label>
+          <input class="form-input" id="new-employee-hire-date" name="hireDate" type="date" />
+        </div>
+      </div>
+      <div class="modal-footer" style="padding:0; margin-top:16px;">
+        <button type="button" class="btn btn-secondary" id="add-employee-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Employee</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script src="js/store.js"></script>
 <script>
-  const r = localStorage.getItem('mc_role') || 'hr';
-  document.body.setAttribute('data-role', r);
-  document.querySelector('.role-switcher select').value = r;
+  let allEmployees = Store.getEmployees();
+
+  const elems = {
+    roleSelect: document.querySelector('.role-switcher select'),
+    subtitle: document.getElementById('employee-count-subtitle'),
+    tableSubtitle: document.getElementById('table-subtitle'),
+    search: document.getElementById('employee-search'),
+    department: document.getElementById('department-filter'),
+    tableWrap: document.getElementById('employee-table-wrap'),
+    tbody: document.getElementById('employee-table-body'),
+    empty: document.getElementById('employee-empty'),
+    emptyMsg: document.getElementById('empty-state-message'),
+    addEmployeeBtn: document.getElementById('add-employee-btn'),
+    addEmployeeModal: document.getElementById('add-employee-modal'),
+    addEmployeeForm: document.getElementById('add-employee-form'),
+    addEmployeeClose: document.getElementById('add-employee-close'),
+    addEmployeeCancel: document.getElementById('add-employee-cancel'),
+  };
+
+  function refreshEmployees() {
+    allEmployees = Store.getEmployees();
+  }
+
+  function openAddEmployeeModal() {
+    elems.addEmployeeForm.reset();
+    elems.addEmployeeModal.style.display = 'flex';
+    document.getElementById('new-employee-name').focus();
+  }
+
+  function closeAddEmployeeModal() {
+    elems.addEmployeeModal.style.display = 'none';
+  }
+
+  function saveEmployeeFromForm(event) {
+    event.preventDefault();
+    const form = new FormData(elems.addEmployeeForm);
+    const name = String(form.get('name') || '').trim();
+    const salary = Number(form.get('salary')) || 0;
+
+    if (!name) return;
+
+    const employees = Store.getEmployees();
+    employees.push({
+      id: `emp-${Date.now()}`,
+      name,
+      salary,
+      department: String(form.get('department') || '').trim(),
+      title: String(form.get('title') || '').trim(),
+      manager: String(form.get('manager') || '').trim(),
+      hireDate: String(form.get('hireDate') || '').trim(),
+    });
+
+    Store.setEmployees(employees);
+    refreshEmployees();
+    renderDepartments();
+    updateView();
+    closeAddEmployeeModal();
+  }
+
+  function fmtSalary(value) {
+    return `$${(Number(value) || 0).toLocaleString()}`;
+  }
+
+  function fmtHireDate(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function renderDepartments() {
+    const departments = [...new Set(allEmployees.map(e => e.department).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    elems.department.innerHTML = '<option value="">All departments</option>';
+    departments.forEach(dept => {
+      const option = document.createElement('option');
+      option.value = dept;
+      option.textContent = dept;
+      elems.department.appendChild(option);
+    });
+  }
+
+  function getFilteredEmployees() {
+    const selectedDept = elems.department.value;
+    const query = elems.search.value.trim().toLowerCase();
+
+    return allEmployees.filter(employee => {
+      if (selectedDept && (employee.department || '') !== selectedDept) return false;
+      if (!query) return true;
+
+      const haystack = [employee.name, employee.department, employee.title, employee.manager]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }
+
+  function renderTable(rows) {
+    elems.tbody.innerHTML = rows.map(employee => `
+      <tr>
+        <td>${employee.name || '—'}</td>
+        <td>${employee.department || '—'}</td>
+        <td>${employee.title || '—'}</td>
+        <td class="numeric">${fmtSalary(employee.salary)}</td>
+        <td>${employee.manager || '—'}</td>
+        <td>${fmtHireDate(employee.hireDate)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function updateView() {
+    const rows = getFilteredEmployees();
+    elems.subtitle.textContent = `${allEmployees.length} employee${allEmployees.length === 1 ? '' : 's'} in cycle`;
+
+    if (!allEmployees.length) {
+      elems.tableWrap.style.display = 'none';
+      elems.empty.style.display = '';
+      elems.emptyMsg.textContent = 'Import your employee roster to begin planning merit increases for this cycle.';
+      elems.tableSubtitle.textContent = 'No employees imported';
+      return;
+    }
+
+    if (!rows.length) {
+      elems.tableWrap.style.display = 'none';
+      elems.empty.style.display = '';
+      elems.emptyMsg.textContent = 'No employees match your current filters. Adjust search criteria or import additional employees.';
+      elems.tableSubtitle.textContent = 'Showing 0 employees';
+      return;
+    }
+
+    elems.empty.style.display = 'none';
+    elems.tableWrap.style.display = '';
+    renderTable(rows);
+    elems.tableSubtitle.textContent = `Showing ${rows.length} of ${allEmployees.length} employee${allEmployees.length === 1 ? '' : 's'}`;
+  }
+
+  (function init() {
+    const role = localStorage.getItem('mc_role') || 'hr';
+    document.body.setAttribute('data-role', role);
+    elems.roleSelect.value = role;
+
+    elems.roleSelect.addEventListener('change', function () {
+      localStorage.setItem('mc_role', this.value);
+      document.body.setAttribute('data-role', this.value);
+    });
+
+    elems.search.addEventListener('input', updateView);
+    elems.department.addEventListener('change', updateView);
+    elems.addEmployeeBtn.addEventListener('click', openAddEmployeeModal);
+    elems.addEmployeeClose.addEventListener('click', closeAddEmployeeModal);
+    elems.addEmployeeCancel.addEventListener('click', closeAddEmployeeModal);
+    elems.addEmployeeForm.addEventListener('submit', saveEmployeeFromForm);
+    elems.addEmployeeModal.addEventListener('click', function (event) {
+      if (event.target === elems.addEmployeeModal) closeAddEmployeeModal();
+    });
+
+    renderDepartments();
+    updateView();
+  })();
 </script>
 </body>
 </html>

@@ -25,6 +25,12 @@ const Store = (() => {
     status:       'open',
   };
 
+  const DEFAULT_FINANCE_MODULE = {
+    defaultMeritPct: 3.5,
+    defaultBonusPct: 8,
+    departments: {},
+  };
+
   return {
 
     // ── Employees ───────────────────────────────────────────────
@@ -35,6 +41,98 @@ const Store = (() => {
     // ── Cycle config ────────────────────────────────────────────
     getCycle()        { return get('cycle') || { ...DEFAULT_CYCLE }; },
     setCycle(obj)     { set('cycle', obj); },
+
+
+    // ── Finance module (team makeup based budgets) ─────────────
+    getFinanceModule() {
+      const current = get('financeModule') || {};
+      return {
+        ...DEFAULT_FINANCE_MODULE,
+        ...current,
+        departments: { ...DEFAULT_FINANCE_MODULE.departments, ...(current.departments || {}) },
+      };
+    },
+
+    setFinanceModule(obj) {
+      const merged = {
+        ...DEFAULT_FINANCE_MODULE,
+        ...(obj || {}),
+        departments: { ...(obj?.departments || {}) },
+      };
+      set('financeModule', merged);
+    },
+
+    getTeamBudgetBreakdown() {
+      const employees = get('employees') || [];
+      const finance   = this.getFinanceModule();
+      const byDept    = {};
+
+      employees.forEach(e => {
+        const dept = e.department || 'Unassigned';
+        byDept[dept] = byDept[dept] || { headcount: 0, payroll: 0 };
+        byDept[dept].headcount += 1;
+        byDept[dept].payroll   += Number(e.salary) || 0;
+      });
+
+      const totalPayroll = Object.values(byDept).reduce((sum, d) => sum + d.payroll, 0);
+
+      const rows = Object.entries(byDept)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([department, stats]) => {
+          const cfg = finance.departments[department] || {};
+          const meritPct = Number.isFinite(cfg.meritPct) ? cfg.meritPct : finance.defaultMeritPct;
+          const bonusPct = Number.isFinite(cfg.bonusPct) ? cfg.bonusPct : finance.defaultBonusPct;
+          return {
+            department,
+            headcount: stats.headcount,
+            payroll: stats.payroll,
+            payrollShare: totalPayroll ? stats.payroll / totalPayroll : 0,
+            meritPct,
+            bonusPct,
+            meritBudget: stats.payroll * (meritPct / 100),
+            bonusBudget: stats.payroll * (bonusPct / 100),
+          };
+        });
+
+      return {
+        totalPayroll,
+        totalMeritBudget: rows.reduce((sum, r) => sum + r.meritBudget, 0),
+        totalBonusBudget: rows.reduce((sum, r) => sum + r.bonusBudget, 0),
+        rows,
+      };
+    },
+
+    // Single helper exposing both planning models:
+    //  - cycleBudget: configured cycle budget (authoritative for merit allocation tracking)
+    //  - financeModel: department roll-up based on payroll mix + merit/bonus assumptions
+    getPlanningSummary() {
+      const employees = get('employees') || [];
+      const cycle = this.getCycle();
+      const team = this.getTeamBudgetBreakdown();
+      const cycleBudget = Number(cycle.budgetTotal) || (Number(cycle.totalPayroll) * (Number(cycle.budgetPct) / 100));
+
+      return {
+        hasEmployees: employees.length > 0,
+        employeeCount: employees.length,
+        cycleBudget: {
+          totalPayroll: Number(cycle.totalPayroll) || 0,
+          budgetPct: Number(cycle.budgetPct) || 0,
+          budgetTotal: cycleBudget,
+          label: 'Cycle Budget',
+        },
+        financeModel: {
+          totalPayroll: team.totalPayroll,
+          meritBudgetTotal: team.totalMeritBudget,
+          bonusBudgetTotal: team.totalBonusBudget,
+          rows: team.rows,
+          label: 'Finance Model Budget',
+        },
+        variance: {
+          meritBudgetDelta: team.totalMeritBudget - cycleBudget,
+          payrollDelta: team.totalPayroll - (Number(cycle.totalPayroll) || 0),
+        },
+      };
+    },
 
     // ── Recommendations (one per employee id) ───────────────────
     getRecommendations() { return get('recommendations') || {}; },
@@ -70,8 +168,8 @@ const Store = (() => {
     getBudgetSummary(employees) {
       employees       = employees || get('employees') || [];
       const recs      = get('recommendations') || {};
-      const cycle     = this.getCycle();
-      const budget    = cycle.budgetTotal || (cycle.totalPayroll * cycle.budgetPct / 100);
+      const planning  = this.getPlanningSummary();
+      const budget    = planning.cycleBudget.budgetTotal;
       let allocated = 0, sumPct = 0;
 
       employees.forEach(e => {

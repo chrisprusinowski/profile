@@ -80,6 +80,7 @@ const CSV = (() => {
     const COLORS   = ['#4F46E5','#0891B2','#059669','#D97706','#DC2626',
                       '#7C3AED','#0D9488','#EA580C','#BE185D','#B45309'];
     const warnings = [];
+    const usedIds  = new Set();
 
     const employees = rows.map((row, i) => {
       // Resolve name
@@ -104,9 +105,13 @@ const CSV = (() => {
       // Auto-generate initials and stable id
       const parts    = name.trim().split(/\s+/);
       const initials = ((parts[0]?.[0] || '') + (parts[parts.length - 1]?.[0] || '')).toUpperCase();
-      const id       = (mapping.id && row[mapping.id])
+      const idBase   = (mapping.id && row[mapping.id])
         ? String(row[mapping.id]).trim()
         : `emp-${i + 1}-${name.replace(/\s+/g, '').slice(0, 6).toLowerCase()}`;
+      const { id, deduped } = ensureUniqueId(idBase, usedIds, i);
+      if (deduped) {
+        warnings.push(`Row ${i + 2} (${name}): duplicate employee id "${idBase}" — stored as "${id}"`);
+      }
 
       return {
         id,
@@ -117,6 +122,7 @@ const CSV = (() => {
         manager:    mapping.manager    ? row[mapping.manager]    : '',
         salary:     salary ?? 0,
         hireDate:   mapping.hireDate   ? row[mapping.hireDate]   : '',
+        rating:     mapping.rating     ? row[mapping.rating]     : '',
         initials,
         avatarColor: COLORS[i % COLORS.length],
       };
@@ -129,6 +135,26 @@ const CSV = (() => {
     if (!str && str !== 0) return 0;
     const n = parseFloat(String(str).replace(/[$,\s]/g, ''));
     return isNaN(n) ? null : Math.round(n);
+  }
+
+  function ensureUniqueId(id, usedIds, rowIdx) {
+    const fallback = `emp-${rowIdx + 1}`;
+    const base = id || fallback;
+
+    if (!usedIds.has(base)) {
+      usedIds.add(base);
+      return { id: base, deduped: false };
+    }
+
+    let suffix = 2;
+    let candidate = `${base}-${suffix}`;
+    while (usedIds.has(candidate)) {
+      suffix += 1;
+      candidate = `${base}-${suffix}`;
+    }
+
+    usedIds.add(candidate);
+    return { id: candidate, deduped: true };
   }
 
   return { parse, autoDetect, toEmployees };

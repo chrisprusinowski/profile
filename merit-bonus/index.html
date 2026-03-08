@@ -120,9 +120,9 @@
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-icon blue">$</div>
-          <div class="metric-label">Total Merit Budget</div>
+          <div class="metric-label">Cycle Budget</div>
           <div class="metric-value">$1.4M</div>
-          <div class="metric-sub">3.5% of total payroll</div>
+          <div class="metric-sub">Configured in cycle settings</div>
         </div>
         <div class="metric-card">
           <div class="metric-icon green">✓</div>
@@ -172,38 +172,7 @@
                   <th>Status</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#4F46E5">JR</div><div class="employee-name">Jamie Rivera</div></div></td>
-                  <td class="text-muted">Engineering</td>
-                  <td class="numeric">8</td>
-                  <td><span class="badge badge-green">Submitted</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#0891B2">SC</div><div class="employee-name">Sam Chen</div></div></td>
-                  <td class="text-muted">Product</td>
-                  <td class="numeric">5</td>
-                  <td><span class="badge badge-green">Submitted</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#059669">AK</div><div class="employee-name">Aisha Kofi</div></div></td>
-                  <td class="text-muted">Sales</td>
-                  <td class="numeric">12</td>
-                  <td><span class="badge badge-amber">In Progress</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#DC2626">MP</div><div class="employee-name">Marcus Park</div></div></td>
-                  <td class="text-muted">Finance</td>
-                  <td class="numeric">4</td>
-                  <td><span class="badge badge-gray">Not Started</span></td>
-                </tr>
-                <tr>
-                  <td><div class="employee-cell"><div class="avatar" style="background:#7C3AED">LP</div><div class="employee-name">Laura Patel</div></div></td>
-                  <td class="text-muted">Operations</td>
-                  <td class="numeric">9</td>
-                  <td><span class="badge badge-gray">Not Started</span></td>
-                </tr>
-              </tbody>
+              <tbody id="manager-completion-body"></tbody>
             </table>
           </div>
         </div>
@@ -213,56 +182,20 @@
           <div class="card-header">
             <div>
               <div class="card-title">Budget by Department</div>
-              <div class="card-subtitle">Allocated vs. approved budget</div>
+              <div class="card-subtitle" id="dept-budget-subtitle">Finance Model Budget by team assumptions</div>
             </div>
           </div>
           <div class="card-body">
-            <div class="bar-chart">
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Engineering</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:82%; background:#2563EB;"></div>
-                </div>
-                <div class="bar-chart-val">$412K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Sales</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:68%; background:#7C3AED;"></div>
-                </div>
-                <div class="bar-chart-val">$265K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Product</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:54%; background:#0891B2;"></div>
-                </div>
-                <div class="bar-chart-val">$178K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Operations</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:41%; background:#059669;"></div>
-                </div>
-                <div class="bar-chart-val">$94K</div>
-              </div>
-              <div class="bar-chart-row">
-                <div class="bar-chart-label">Finance</div>
-                <div class="bar-chart-bar-wrap">
-                  <div class="bar-chart-bar" style="width:28%; background:#D97706;"></div>
-                </div>
-                <div class="bar-chart-val">$31K</div>
-              </div>
-            </div>
+            <div class="bar-chart" id="department-budget-chart"></div>
 
             <div class="divider"></div>
 
             <div style="display:flex; justify-content:space-between; font-size:13px;">
-              <span class="text-muted">Total allocated</span>
-              <span class="fw-700">$980K of $1.4M</span>
+              <span class="text-muted">Allocated (recommendations)</span>
+              <span class="fw-700" id="dept-budget-summary">$980K of $1.4M</span>
             </div>
             <div class="progress-bar mt-8">
-              <div class="progress-fill blue" style="width:70%"></div>
+              <div class="progress-fill blue" id="total-allocated-progress" style="width:70%"></div>
             </div>
           </div>
         </div>
@@ -317,6 +250,29 @@
     return '$' + Math.round(n);
   }
 
+  function initials(name) {
+    return String(name || 'Unassigned')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(part => part[0].toUpperCase())
+      .join('');
+  }
+
+  function hashColor(seed) {
+    const palette = ['#4F46E5', '#0891B2', '#059669', '#DC2626', '#7C3AED', '#D97706', '#2563EB'];
+    const txt = String(seed || 'Unassigned');
+    let hash = 0;
+    for (let i = 0; i < txt.length; i++) hash = ((hash << 5) - hash) + txt.charCodeAt(i);
+    return palette[Math.abs(hash) % palette.length];
+  }
+
+  function statusBadge(status) {
+    if (status === 'Submitted') return 'badge-green';
+    if (status === 'In Progress') return 'badge-amber';
+    return 'badge-gray';
+  }
+
   function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg;
@@ -341,16 +297,28 @@
         </div>
         <a href="import.html" class="btn btn-primary btn-sm" style="margin-left:12px; white-space:nowrap;">Import CSV →</a>`;
       content.insertBefore(banner, content.firstChild);
-      return; // Leave metric cards as-is (showing demo data)
+      const cards = document.querySelectorAll('.metric-card');
+      cards[0].querySelector('.metric-value').textContent = '$0';
+      cards[0].querySelector('.metric-sub').textContent = 'Cycle Budget unavailable until employees are imported';
+      cards[1].querySelector('.metric-value').textContent = '$0';
+      cards[1].querySelector('.metric-sub').textContent = 'No allocations yet';
+      cards[2].querySelector('.metric-value').textContent = '0 / 0';
+      cards[2].querySelector('.metric-sub').textContent = 'Import employees to begin';
+      cards[3].querySelector('.metric-value').textContent = '0';
+      cards[3].querySelector('.metric-sub').textContent = 'No employees in cycle';
+      return;
     }
 
     // ── Live metrics from store ────────────────────────────────
     const employees = Store.getEmployees();
     const cycle     = Store.getCycle();
+    const planning  = Store.getPlanningSummary();
+    const financeRows = planning.financeModel.rows;
     const summary   = Store.getBudgetSummary();
     const counts    = Store.getStatusCounts();
     const depts     = Store.getDepartments();
 
+    const recommendations = Store.getRecommendations();
     const total     = employees.length;
     const submitted = counts.Submitted + counts.Approved + counts.Flagged;
     const flagged   = counts.Flagged;
@@ -359,8 +327,8 @@
     const cards = document.querySelectorAll('.metric-card');
 
     // Card 1: Total Merit Budget
-    cards[0].querySelector('.metric-value').textContent = fmtK(summary.budget);
-    cards[0].querySelector('.metric-sub').textContent   = `${cycle.budgetPct || 3.5}% of total payroll`;
+    cards[0].querySelector('.metric-value').textContent = fmtK(planning.cycleBudget.budgetTotal);
+    cards[0].querySelector('.metric-sub').textContent   = `${planning.cycleBudget.budgetPct || 0}% configured cycle budget`;
 
     // Card 2: Budget Allocated
     const pctUsed = summary.pctUsed;
@@ -387,6 +355,34 @@
       if (flagAlert) {
         flagAlert.textContent = `${flagged} merit increase${flagged !== 1 ? 's' : ''} exceed the ${cycle.guidelineMax || 10}% guideline`;
       }
+    }
+
+    // Budget by department widget now tracks finance model assumptions (admin editable)
+    const barRows = document.querySelectorAll('.bar-chart .bar-chart-row');
+    const maxMerit = Math.max(...financeRows.map(r => r.meritBudget), 0);
+    barRows.forEach((rowEl, idx) => {
+      const row = financeRows[idx];
+      if (!row) {
+        rowEl.style.display = 'none';
+        return;
+      }
+      rowEl.style.display = '';
+      rowEl.querySelector('.bar-chart-label').textContent = row.department;
+      rowEl.querySelector('.bar-chart-val').textContent = `${fmtK(row.meritBudget)} @ ${row.meritPct.toFixed(1)}%`;
+      const width = maxMerit ? Math.max((row.meritBudget / maxMerit) * 100, 8) : 0;
+      rowEl.querySelector('.bar-chart-bar').style.width = `${width}%`;
+    });
+
+    const budgetSummaryRow = document.getElementById('dept-budget-summary');
+    if (budgetSummaryRow) {
+      budgetSummaryRow.textContent = `${fmtK(summary.allocated)} of ${fmtK(planning.cycleBudget.budgetTotal)} (Cycle Budget)`;
+    }
+
+    const budgetSubtitle = document.getElementById('dept-budget-subtitle');
+    if (budgetSubtitle) {
+      const delta = planning.variance.meritBudgetDelta;
+      const sign = delta >= 0 ? '+' : '−';
+      budgetSubtitle.textContent = `Finance Model Budget by team assumptions (${sign}${fmtK(Math.abs(delta))} vs Cycle Budget)`;
     }
   })();
 </script>
