@@ -16,7 +16,7 @@
     "dev:api": "npm run dev --workspace=api",
     "dev:client": "npm run dev --workspace=client",
     "dev:postgres": "docker compose up -d postgres",
-    "db:migrate": "bash scripts/migrate.sh",
+    "db:migrate": "node scripts/migrate.mjs",
     "dev:fullstack": "npm run dev:postgres && npm run db:migrate && (npm run dev:api & npm run dev:client)"
   },
   "devDependencies": {
