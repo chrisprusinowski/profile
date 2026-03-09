@@ -15,6 +15,7 @@ export default function App() {
   const [recommendations, setRecommendations] = useState<RecommendationMap>({});
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -37,8 +38,10 @@ export default function App() {
       setEmployees(emps);
       setCycle(cyc);
       setRecommendations(recs);
+      setLoadError(null);
     } catch (err) {
       console.error('Failed to load data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load application data');
     } finally {
       setLoading(false);
     }
@@ -65,6 +68,23 @@ export default function App() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'var(--gray-500)', fontSize: 15 }}>
         Loading…
+      </div>
+    );
+  }
+
+
+  if (loadError) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: 24 }}>
+        <div className="card" style={{ maxWidth: 560 }}>
+          <div className="card-header"><div className="card-title">Unable to load app data</div></div>
+          <div className="card-body">
+            <p style={{ marginTop: 0 }}>{loadError}</p>
+            <p style={{ color: 'var(--gray-500)', marginBottom: 0 }}>
+              Check that the API is running and can connect to PostgreSQL, then refresh.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
