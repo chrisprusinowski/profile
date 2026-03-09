@@ -10,8 +10,6 @@ declare const __STATIC_CSV__: string;
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
 
-// ── CSV parser (used in static mode) ──────────────────────────────────────────
-
 function parseCsvLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
@@ -66,8 +64,6 @@ function parseCsv(raw: string): Employee[] {
     .filter((e) => e.name);
 }
 
-// ── localStorage helpers (static mode) ────────────────────────────────────────
-
 const LS_CYCLE = 'mc_cycle_v2';
 const LS_RECS = 'mc_recommendations_v2';
 
@@ -103,12 +99,19 @@ function lsGetRecs(): RecommendationMap {
   }
 }
 
-// ── Public API ─────────────────────────────────────────────────────────────────
+async function parseError(res: Response, fallback: string): Promise<Error> {
+  try {
+    const body = (await res.json()) as { error?: string; message?: string };
+    return new Error(body.message || body.error || fallback);
+  } catch {
+    return new Error(fallback);
+  }
+}
 
 export async function fetchEmployees(): Promise<Employee[]> {
   if (API_BASE) {
     const res = await fetch(`${API_BASE}/api/v1/employees`);
-    if (!res.ok) throw new Error(`Failed to load employees: ${res.status}`);
+    if (!res.ok) throw await parseError(res, `Failed to load employees: ${res.status}`);
     return res.json() as Promise<Employee[]>;
   }
   return parseCsv(__STATIC_CSV__);
@@ -117,7 +120,7 @@ export async function fetchEmployees(): Promise<Employee[]> {
 export async function fetchCycle(): Promise<Cycle> {
   if (API_BASE) {
     const res = await fetch(`${API_BASE}/api/v1/cycle`);
-    if (!res.ok) throw new Error(`Failed to load cycle: ${res.status}`);
+    if (!res.ok) throw await parseError(res, `Failed to load cycle: ${res.status}`);
     return res.json() as Promise<Cycle>;
   }
   return lsGetCycle();
@@ -130,7 +133,7 @@ export async function saveCycle(cycle: Cycle): Promise<Cycle> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cycle),
     });
-    if (!res.ok) throw new Error(`Failed to save cycle: ${res.status}`);
+    if (!res.ok) throw await parseError(res, `Failed to save cycle: ${res.status}`);
     return res.json() as Promise<Cycle>;
   }
   localStorage.setItem(LS_CYCLE, JSON.stringify(cycle));
@@ -140,7 +143,7 @@ export async function saveCycle(cycle: Cycle): Promise<Cycle> {
 export async function fetchRecommendations(): Promise<RecommendationMap> {
   if (API_BASE) {
     const res = await fetch(`${API_BASE}/api/v1/recommendations`);
-    if (!res.ok) throw new Error(`Failed to load recommendations: ${res.status}`);
+    if (!res.ok) throw await parseError(res, `Failed to load recommendations: ${res.status}`);
     return res.json() as Promise<RecommendationMap>;
   }
   return lsGetRecs();
@@ -156,7 +159,7 @@ export async function saveRecommendation(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Failed to save recommendation: ${res.status}`);
+    if (!res.ok) throw await parseError(res, `Failed to save recommendation: ${res.status}`);
     return;
   }
   const recs = lsGetRecs();
@@ -174,7 +177,8 @@ export async function submitAllRecommendations(
   employeeIds: string[],
 ): Promise<void> {
   if (API_BASE) {
-    await fetch(`${API_BASE}/api/v1/recommendations/submit-all`, { method: 'POST' });
+    const res = await fetch(`${API_BASE}/api/v1/recommendations/submit-all`, { method: 'POST' });
+    if (!res.ok) throw await parseError(res, `Failed to submit recommendations: ${res.status}`);
     return;
   }
   const recs = lsGetRecs();

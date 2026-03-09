@@ -7,9 +7,11 @@ import './styles.css';
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
 
+const base = (import.meta.env.VITE_BASE_URL as string) || '/';
+
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter basename="/profile">
+    <BrowserRouter basename={base}>
       <App />
     </BrowserRouter>
   </StrictMode>,
