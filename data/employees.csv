@@ -1,0 +1,11 @@
+id,name,email,department,title,salary,manager,hire_date
+emp-1001,Alex Morgan,alex.morgan@company.com,Engineering,Senior Software Engineer,145000,Jamie Rivera,2021-03-15
+emp-1002,Priya Nair,priya.nair@company.com,Engineering,Software Engineer II,132000,Jamie Rivera,2022-06-01
+emp-1003,Brianna Scott,brianna.scott@company.com,Product,Product Manager,130000,Jordan Pike,2020-07-01
+emp-1004,Carlos Vega,carlos.vega@company.com,Sales,Account Executive,95000,Aisha Kofi,2022-01-10
+emp-1005,Dana Kim,dana.kim@company.com,Engineering,QA Engineer,118000,Jamie Rivera,2019-11-19
+emp-1006,Jordan Pike,jordan.pike@company.com,Product,Director of Product,185000,Morgan Lee,2018-04-22
+emp-1007,Sam Chen,sam.chen@company.com,Engineering,Staff Engineer,172000,Jamie Rivera,2017-09-01
+emp-1008,Aisha Kofi,aisha.kofi@company.com,Sales,VP of Sales,210000,Morgan Lee,2019-02-14
+emp-1009,Riley Torres,riley.torres@company.com,Marketing,Marketing Manager,115000,Casey Park,2021-08-30
+emp-1010,Casey Park,casey.park@company.com,Marketing,VP of Marketing,190000,Morgan Lee,2018-11-05
