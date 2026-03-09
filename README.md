@@ -15,7 +15,6 @@ This repository contains:
 - Node.js 22+
 - npm 10+
 - Docker + Docker Compose
-- `psql` CLI (for migration command)
 
 ---
 
@@ -137,3 +136,11 @@ npm run typecheck --workspace=api
 - Client API layer: `apps/client/src/api/client.ts`
 - Main pages: `apps/client/src/pages/*`
 - DB migrations: `infra/postgres/migrations/*.sql`
+
+## 8) Beginner notes on env files
+
+Edit these files only if you need non-default ports/credentials:
+
+- `.env` (shared Docker/database defaults)
+- `apps/api/.env` (API runtime vars; loaded automatically when API starts)
+- `apps/client/.env.local` (client runtime vars for Vite)
