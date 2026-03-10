@@ -149,6 +149,7 @@ export async function createAppUser(payload: {
   email: string;
   role: AppUser['role'];
   managerName?: string;
+  managerEmail?: string;
   isActive?: boolean;
 }): Promise<AppUserRecord> {
   requireApi();
@@ -165,7 +166,7 @@ export async function createAppUser(payload: {
 
 export async function updateAppUser(
   email: string,
-  payload: { role?: AppUser['role']; managerName?: string; isActive?: boolean }
+  payload: { role?: AppUser['role']; managerName?: string; managerEmail?: string; isActive?: boolean }
 ): Promise<AppUserRecord> {
   requireApi();
   const res = await authedFetch(
@@ -398,4 +399,24 @@ export async function submitAllRecommendations(
     }
   }
   localStorage.setItem(LS_RECS, JSON.stringify(recs));
+}
+
+
+export async function lockAllRecommendations(): Promise<{ locked: number }> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/recommendations/lock-all`, { method: 'POST' });
+  return readApiData<{ locked: number }>(res, `Failed to lock recommendations: ${res.status}`);
+}
+
+export async function reopenAllRecommendations(): Promise<{ reopened: number }> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/recommendations/reopen-all`, { method: 'POST' });
+  return readApiData<{ reopened: number }>(res, `Failed to reopen recommendations: ${res.status}`);
+}
+
+export async function downloadExport(path: 'employees.csv' | 'recommendations.csv'): Promise<string> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/exports/${path}`);
+  if (!res.ok) throw await parseError(res, `Failed to export ${path}: ${res.status}`);
+  return res.text();
 }

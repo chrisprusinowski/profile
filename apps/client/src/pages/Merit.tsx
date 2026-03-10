@@ -3,7 +3,8 @@ import type {
   Employee,
   Cycle,
   RecommendationMap,
-  Recommendation
+  Recommendation,
+  AppUser
 } from '../types.js';
 import {
   fmt,
@@ -12,7 +13,7 @@ import {
   avatarColor,
   statusBadgeClass
 } from '../utils.js';
-import { saveRecommendation, submitAllRecommendations } from '../api/client.js';
+import { lockAllRecommendations, reopenAllRecommendations, saveRecommendation, submitAllRecommendations } from '../api/client.js';
 
 interface Props {
   employees: Employee[];
@@ -21,6 +22,7 @@ interface Props {
   showToast: (msg: string) => void;
   refreshRecommendations: () => Promise<void>;
   readOnly?: boolean;
+  currentUser: AppUser;
 }
 
 const PERFORMANCE_RATINGS: Array<1 | 2 | 3> = [1, 2, 3];
@@ -31,7 +33,8 @@ export function Merit({
   recommendations,
   showToast,
   refreshRecommendations,
-  readOnly = false
+  readOnly = false,
+  currentUser
 }: Props) {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
@@ -88,7 +91,7 @@ export function Merit({
     async (employeeId: string, patch: Partial<Recommendation>) => {
       const current = recommendations[employeeId];
       const meritPct = patch.meritPct ?? current?.meritPct ?? 0;
-      const locked = readOnly || current?.status === 'Approved';
+      const locked = readOnly || cycle?.status !== 'open' || current?.status === 'Submitted' || current?.status === 'Locked';
       if (locked) return;
 
       const next: Partial<Recommendation> = {
@@ -105,8 +108,8 @@ export function Merit({
         notes: patch.notes ?? current?.notes ?? '',
         status:
           meritPct > guidelineMax
-            ? 'Flagged'
-            : (patch.status ?? current?.status ?? 'Submitted')
+            ? 'Draft'
+            : (patch.status ?? current?.status ?? 'Draft')
       };
 
       await saveRecommendation(employeeId, next);
@@ -175,6 +178,12 @@ export function Merit({
               Submit All Drafts
             </button>
           )}
+          {currentUser.role === 'admin' && (
+            <>
+              <button className="btn btn-secondary btn-sm" onClick={async () => { const r = await lockAllRecommendations(); await refreshRecommendations(); showToast(`Locked ${r.locked}`); }} style={{ marginLeft: 8 }}>Lock Submitted</button>
+              <button className="btn btn-secondary btn-sm" onClick={async () => { const r = await reopenAllRecommendations(); await refreshRecommendations(); showToast(`Reopened ${r.reopened}`); }} style={{ marginLeft: 8 }}>Reopen Locked</button>
+            </>
+          )}
         </div>
       </header>
 
@@ -236,8 +245,7 @@ export function Merit({
             <option value="">All Statuses</option>
             <option>Draft</option>
             <option>Submitted</option>
-            <option>Approved</option>
-            <option>Flagged</option>
+                    <option>Locked</option>
           </select>
         </div>
 
@@ -261,7 +269,7 @@ export function Merit({
                 const rec = recommendations[e.id];
                 const meritPct = rec?.meritPct ?? 0;
                 const status = rec?.status ?? 'Draft';
-                const locked = readOnly || status === 'Approved';
+                const locked = readOnly || cycle?.status !== 'open' || status === 'Submitted' || status === 'Locked';
 
                 const pay = e.payRange;
                 const payBandLabel = pay?.bandStatus === 'below_range' ? 'Below range' : pay?.bandStatus === 'above_range' ? 'Above range' : pay?.bandStatus === 'in_range' ? 'In range' : 'No range matched';

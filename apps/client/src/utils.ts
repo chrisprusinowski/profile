@@ -39,8 +39,7 @@ export function statusBadgeClass(status: string): string {
   const map: Record<string, string> = {
     Draft: 'badge-gray',
     Submitted: 'badge-blue',
-    Approved: 'badge-green',
-    Flagged: 'badge-amber',
+    Locked: 'badge-green',
   };
   return map[status] ?? 'badge-gray';
 }

@@ -73,7 +73,7 @@ export default function App() {
     void refreshAll();
   }, [refreshAll]);
 
-  const flaggedCount = Object.values(recommendations).filter((r) => r.status === 'Flagged').length;
+  const flaggedCount = 0;
 
   if (loading) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading…</div>;
@@ -110,7 +110,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard employees={employees} cycle={cycle} recommendations={recommendations} />} />
           <Route path="/employees" element={<Employees employees={employees} cycle={cycle} recommendations={recommendations} showToast={showToast} refreshAll={refreshAll} readOnly={isReadOnly || currentUser.role === 'manager'} />} />
-          <Route path="/merit" element={<Merit employees={employees} cycle={cycle} recommendations={recommendations} showToast={showToast} refreshRecommendations={refreshRecommendations} readOnly={isReadOnly} />} />
+          <Route path="/merit" element={<Merit employees={employees} cycle={cycle} recommendations={recommendations} showToast={showToast} refreshRecommendations={refreshRecommendations} readOnly={isReadOnly} currentUser={currentUser} />} />
           <Route path="/admin" element={canManageUsers ? <Admin employees={employees} cycle={cycle} recommendations={recommendations} showToast={showToast} setCycle={setCycle} demoUsers={demoUsers} refreshAll={refreshAll} /> : <Navigate to="/" replace />} />
           <Route path="/executive" element={<Executive employees={employees} cycle={cycle} recommendations={recommendations} />} />
         </Routes>

@@ -8,6 +8,7 @@ export interface AppUser {
   email: string;
   role: AppRole;
   managerName: string | null;
+  managerEmail: string | null;
   isActive: boolean;
 }
 
@@ -40,6 +41,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
       `SELECT email,
               role,
               manager_name AS "managerName",
+              manager_email AS "managerEmail",
               is_active AS "isActive"
        FROM app_users
        WHERE lower(email) = lower($1)
@@ -79,18 +81,30 @@ export function getManagerScopeName(user: AppUser): string | null {
   return null;
 }
 
+export function getManagerScopeEmail(user: AppUser): string | null {
+  if (user.role !== 'manager') return null;
+  if (user.managerEmail && user.managerEmail.trim()) {
+    return user.managerEmail.trim().toLowerCase();
+  }
+  return null;
+}
+
 export async function assertEmployeeInScope(user: AppUser, employeeId: string): Promise<boolean> {
   if (user.role !== 'manager') return true;
   const managerName = getManagerScopeName(user);
-  if (!managerName) return false;
+  const managerEmail = getManagerScopeEmail(user);
+  if (!managerName && !managerEmail) return false;
 
   const result = await pool.query(
     `SELECT 1
      FROM employees
      WHERE id = $1
-       AND lower(manager) = lower($2)
+       AND (
+         ($2::text IS NOT NULL AND lower(manager) = lower($2))
+         OR ($3::text IS NOT NULL AND lower(manager_email) = lower($3))
+       )
      LIMIT 1`,
-    [employeeId, managerName],
+    [employeeId, managerName, managerEmail],
   );
 
   return Boolean(result.rows[0]);

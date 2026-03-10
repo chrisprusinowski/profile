@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireRole, type AuthenticatedRequest } from '../auth.js';
 import { pool } from '../db.js';
+import { logAuditEvent } from '../audit.js';
 
 export const payRangesRouter = Router();
 
@@ -302,6 +303,7 @@ payRangesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       }
     }
 
+    await logAuditEvent({ actionType: 'pay_range.imported', actorEmail: req.user!.email, targetEntity: 'pay_ranges', targetId: 'import-csv', metadata: { processed, inserted, updated, rejected } });
     res.json({
       success: true,
       data: {
