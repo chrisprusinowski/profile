@@ -1,10 +1,11 @@
-import type { Cycle, Employee, Recommendation, RecommendationMap } from '../types.js';
+import type { AppUser, Cycle, Employee, Recommendation, RecommendationMap } from '../types.js';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
+const LS_DEMO_USER_EMAIL = 'mc_demo_user_email';
 
 type ApiResponse<T> = {
-  success: boolean;
-  data: T;
+  success?: boolean;
+  data?: T;
   error?: string;
   message?: string;
 };
@@ -16,6 +17,11 @@ export type CsvImportSummary = {
   rejected: number;
   validationErrors: Array<{ row: number; error: string }>;
 };
+
+export interface AppUserRecord extends AppUser {
+  createdAt: string;
+  updatedAt: string;
+}
 
 const LS_CYCLE = 'mc_cycle_v2';
 const LS_RECS = 'mc_recommendations_v2';
@@ -52,6 +58,14 @@ function lsGetRecs(): RecommendationMap {
   }
 }
 
+export function getDemoUserEmail(): string {
+  return localStorage.getItem(LS_DEMO_USER_EMAIL) ?? 'admin@demo.com';
+}
+
+export function setDemoUserEmail(email: string) {
+  localStorage.setItem(LS_DEMO_USER_EMAIL, email);
+}
+
 async function parseError(res: Response, fallback: string): Promise<Error> {
   try {
     const body = (await res.json()) as { error?: string; message?: string };
@@ -67,24 +81,71 @@ function requireApi() {
   }
 }
 
+function getAuthHeaders() {
+  return {
+    'x-demo-user-email': getDemoUserEmail(),
+  };
+}
+
+async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
+  const headers = {
+    ...(init?.headers ?? {}),
+    ...getAuthHeaders(),
+  };
+
+  return fetch(url, { ...init, headers });
+}
+
 async function readApiData<T>(res: Response, fallback: string): Promise<T> {
   if (!res.ok) throw await parseError(res, fallback);
   const body = (await res.json()) as ApiResponse<T> | T;
-  if (typeof body === 'object' && body !== null && 'success' in body && 'data' in body) {
-    return body.data;
+  if (typeof body === 'object' && body !== null && 'data' in body && body.data !== undefined) {
+    return body.data as T;
   }
   return body as T;
 }
 
+export async function fetchCurrentUser(): Promise<AppUser> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/users/me`);
+  return readApiData<AppUser>(res, `Failed to load current user: ${res.status}`);
+}
+
+export async function fetchAppUsers(): Promise<AppUserRecord[]> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/users`);
+  return readApiData<AppUserRecord[]>(res, `Failed to load app users: ${res.status}`);
+}
+
+export async function createAppUser(payload: { email: string; role: AppUser['role']; managerName?: string; isActive?: boolean }): Promise<AppUserRecord> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return readApiData<AppUserRecord>(res, `Failed to create app user: ${res.status}`);
+}
+
+export async function updateAppUser(email: string, payload: { role?: AppUser['role']; managerName?: string; isActive?: boolean }): Promise<AppUserRecord> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/users/${encodeURIComponent(email)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return readApiData<AppUserRecord>(res, `Failed to update app user: ${res.status}`);
+}
+
 export async function fetchEmployees(): Promise<Employee[]> {
   if (!API_BASE) return [];
-  const res = await fetch(`${API_BASE}/api/v1/employees`);
+  const res = await authedFetch(`${API_BASE}/api/v1/employees`);
   return readApiData<Employee[]>(res, `Failed to load employees: ${res.status}`);
 }
 
 export async function createEmployee(employee: Employee): Promise<Employee> {
   requireApi();
-  const res = await fetch(`${API_BASE}/api/v1/employees`, {
+  const res = await authedFetch(`${API_BASE}/api/v1/employees`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(employee),
@@ -95,7 +156,7 @@ export async function createEmployee(employee: Employee): Promise<Employee> {
 
 export async function updateEmployee(id: string, employee: Omit<Employee, 'id'>): Promise<Employee> {
   requireApi();
-  const res = await fetch(`${API_BASE}/api/v1/employees/${id}`, {
+  const res = await authedFetch(`${API_BASE}/api/v1/employees/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(employee),
@@ -106,7 +167,7 @@ export async function updateEmployee(id: string, employee: Omit<Employee, 'id'>)
 
 export async function deleteEmployee(id: string): Promise<void> {
   requireApi();
-  const res = await fetch(`${API_BASE}/api/v1/employees/${id}`, {
+  const res = await authedFetch(`${API_BASE}/api/v1/employees/${id}`, {
     method: 'DELETE',
   });
 
@@ -115,7 +176,7 @@ export async function deleteEmployee(id: string): Promise<void> {
 
 export async function importEmployeesCsv(payload: { csvContent?: string; filePath?: string }): Promise<CsvImportSummary> {
   requireApi();
-  const res = await fetch(`${API_BASE}/api/v1/employees/import-csv`, {
+  const res = await authedFetch(`${API_BASE}/api/v1/employees/import-csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -126,7 +187,7 @@ export async function importEmployeesCsv(payload: { csvContent?: string; filePat
 
 export async function fetchCycle(): Promise<Cycle> {
   if (API_BASE) {
-    const res = await fetch(`${API_BASE}/api/v1/cycle`);
+    const res = await authedFetch(`${API_BASE}/api/v1/cycle`);
     if (!res.ok) throw await parseError(res, `Failed to load cycle: ${res.status}`);
     return res.json() as Promise<Cycle>;
   }
@@ -135,7 +196,7 @@ export async function fetchCycle(): Promise<Cycle> {
 
 export async function saveCycle(cycle: Cycle): Promise<Cycle> {
   if (API_BASE) {
-    const res = await fetch(`${API_BASE}/api/v1/cycle`, {
+    const res = await authedFetch(`${API_BASE}/api/v1/cycle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cycle),
@@ -149,19 +210,16 @@ export async function saveCycle(cycle: Cycle): Promise<Cycle> {
 
 export async function fetchRecommendations(): Promise<RecommendationMap> {
   if (API_BASE) {
-    const res = await fetch(`${API_BASE}/api/v1/recommendations`);
+    const res = await authedFetch(`${API_BASE}/api/v1/recommendations`);
     if (!res.ok) throw await parseError(res, `Failed to load recommendations: ${res.status}`);
     return res.json() as Promise<RecommendationMap>;
   }
   return lsGetRecs();
 }
 
-export async function saveRecommendation(
-  employeeId: string,
-  data: Partial<Recommendation>,
-): Promise<void> {
+export async function saveRecommendation(employeeId: string, data: Partial<Recommendation>): Promise<void> {
   if (API_BASE) {
-    const res = await fetch(`${API_BASE}/api/v1/recommendations/${employeeId}`, {
+    const res = await authedFetch(`${API_BASE}/api/v1/recommendations/${employeeId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -180,11 +238,9 @@ export async function saveRecommendation(
   localStorage.setItem(LS_RECS, JSON.stringify(recs));
 }
 
-export async function submitAllRecommendations(
-  employeeIds: string[],
-): Promise<void> {
+export async function submitAllRecommendations(employeeIds: string[]): Promise<void> {
   if (API_BASE) {
-    const res = await fetch(`${API_BASE}/api/v1/recommendations/submit-all`, { method: 'POST' });
+    const res = await authedFetch(`${API_BASE}/api/v1/recommendations/submit-all`, { method: 'POST' });
     if (!res.ok) throw await parseError(res, `Failed to submit recommendations: ${res.status}`);
     return;
   }

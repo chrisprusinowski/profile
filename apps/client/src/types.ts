@@ -33,3 +33,12 @@ export interface Cycle {
   guidelineMax: number;
   status: string;
 }
+
+export type AppRole = 'admin' | 'executive' | 'manager';
+
+export interface AppUser {
+  email: string;
+  role: AppRole;
+  managerName?: string | null;
+  isActive: boolean;
+}

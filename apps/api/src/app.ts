@@ -3,13 +3,15 @@ import { checkDatabaseHealth } from './db.js';
 import { employeesRouter } from './routes/employees.js';
 import { cycleRouter } from './routes/cycle.js';
 import { recommendationsRouter } from './routes/recommendations.js';
+import { usersRouter } from './routes/users.js';
+import { authMiddleware } from './auth.js';
 
 export const createApp = () => {
   const app = express();
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Demo-User-Email');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') {
       res.sendStatus(200);
@@ -32,6 +34,9 @@ export const createApp = () => {
     }
   });
 
+  app.use(authMiddleware);
+
+  app.use('/api/v1/users', usersRouter);
   app.use('/api/v1/employees', employeesRouter);
   app.use('/api/v1/cycle', cycleRouter);
   app.use('/api/v1/recommendations', recommendationsRouter);

@@ -9,11 +9,12 @@ interface Props {
   recommendations: RecommendationMap;
   showToast: (msg: string) => void;
   refreshRecommendations: () => Promise<void>;
+  readOnly?: boolean;
 }
 
 const RATINGS = ['Exceptional', 'Exceeds Expectations', 'Meets Expectations', 'Needs Improvement'];
 
-export function Merit({ employees, cycle, recommendations, showToast, refreshRecommendations }: Props) {
+export function Merit({ employees, cycle, recommendations, showToast, refreshRecommendations, readOnly = false }: Props) {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -54,15 +55,16 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
       if (!q) return true;
       return [e.name, e.title, e.department].filter(Boolean).join(' ').toLowerCase().includes(q);
     });
-  }, [employees, recommendations, search, deptFilter, statusFilter]);
+  }, [employees, recommendations, search, deptFilter, statusFilter, readOnly]);
 
   // ── Inline edit ─────────────────────────────────────────────
   const updatePct = useCallback(async (id: string, val: number) => {
     const pct = isNaN(val) ? 0 : Math.max(0, Math.min(25, val));
     const current = recommendations[id];
-    const locked = current?.status === 'Approved';
+    const locked = readOnly || current?.status === 'Approved';
     if (locked) return;
     const newStatus: Recommendation['status'] = pct > guidelineMax ? 'Flagged' : 'Submitted';
+    if (readOnly) return;
     await saveRecommendation(id, {
       meritPct: pct,
       rating: current?.rating ?? 'Meets Expectations',
@@ -70,7 +72,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
       status: newStatus,
     });
     await refreshRecommendations();
-  }, [recommendations, guidelineMax, refreshRecommendations]);
+  }, [recommendations, guidelineMax, refreshRecommendations, readOnly]);
 
   // ── Modal ───────────────────────────────────────────────────
   const openModal = (id: string) => {
@@ -90,6 +92,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
     if (!modalId) return;
     const pct = Math.max(0, Math.min(25, modalData.meritPct ?? 0));
     const newStatus: Recommendation['status'] = pct > guidelineMax ? 'Flagged' : 'Submitted';
+    if (readOnly) return;
     await saveRecommendation(modalId, { ...modalData, meritPct: pct, status: newStatus });
     await refreshRecommendations();
     const emp = employees.find((e) => e.id === modalId);
@@ -101,6 +104,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
     const draftIds = employees
       .filter((e) => (recommendations[e.id]?.status ?? 'Draft') === 'Draft')
       .map((e) => e.id);
+    if (readOnly) { showToast('Read-only mode'); return; }
     if (!draftIds.length) { showToast('No draft recommendations to submit'); return; }
     await submitAllRecommendations(draftIds);
     await refreshRecommendations();
@@ -134,7 +138,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
         <header className="topbar">
           <div className="topbar-left">
             <div className="page-title">Merit Recommendations</div>
-            <div className="page-subtitle">Review and edit merit increases</div>
+            <div className="page-subtitle">{readOnly ? 'Read-only mode · ' : ''}Review and edit merit increases</div>
           </div>
         </header>
         <div className="page-content">
@@ -157,11 +161,11 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
       <header className="topbar">
         <div className="topbar-left">
           <div className="page-title">Merit Recommendations</div>
-          <div className="page-subtitle">{filtered.length} of {employees.length} employees</div>
+          <div className="page-subtitle">{readOnly ? 'Read-only mode · ' : ''}{filtered.length} of {employees.length} employees</div>
         </div>
         <div className="topbar-right">
           <button className="btn btn-secondary btn-sm" onClick={exportCsv}>⬇ Export CSV</button>
-          <button className="btn btn-primary btn-sm" onClick={submitAll}>Submit All Drafts</button>
+          {!readOnly && <button className="btn btn-primary btn-sm" onClick={submitAll}>Submit All Drafts</button>}
         </div>
       </header>
 
@@ -272,7 +276,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
                         max="25"
                         defaultValue={pct}
                         key={`${e.id}-${pct}`}
-                        disabled={locked}
+                        disabled={Boolean(locked)}
                         onBlur={(ev) => updatePct(e.id, parseFloat(ev.target.value))}
                         onKeyDown={(ev) => { if (ev.key === 'Enter') ev.currentTarget.blur(); }}
                       />
@@ -290,7 +294,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
                     </td>
                     <td className="actions">
                       <span className={`badge ${statusBadgeClass(status)}`}>{status}</span>
-                      {!locked && (
+                      {!readOnly && !locked && (
                         <button className="btn btn-ghost btn-sm" style={{ marginLeft: 4 }} onClick={() => openModal(e.id)}>
                           Edit
                         </button>
@@ -338,6 +342,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
                   max="25"
                   value={modalData.meritPct ?? 0}
                   style={{ fontSize: 16, fontWeight: 700 }}
+                  readOnly={readOnly}
                   onChange={(e) => setModalData((d) => ({ ...d, meritPct: parseFloat(e.target.value) || 0 }))}
                 />
                 {(modalData.meritPct ?? 0) > 0 && (
@@ -351,6 +356,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
                 <select
                   className="form-select"
                   value={modalData.rating ?? 'Meets Expectations'}
+                  disabled={readOnly}
                   onChange={(e) => setModalData((d) => ({ ...d, rating: e.target.value }))}
                 >
                   {RATINGS.map((r) => <option key={r}>{r}</option>)}
@@ -362,6 +368,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
                   className="form-textarea"
                   placeholder="Add context for this recommendation…"
                   value={modalData.notes ?? ''}
+                  readOnly={readOnly}
                   onChange={(e) => setModalData((d) => ({ ...d, notes: e.target.value }))}
                 />
               </div>
@@ -374,7 +381,7 @@ export function Merit({ employees, cycle, recommendations, showToast, refreshRec
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={closeModal}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveModal}>Save &amp; Submit</button>
+              {!readOnly && <button className="btn btn-primary" onClick={saveModal}>Save &amp; Submit</button>}
             </div>
           </div>
         </div>
