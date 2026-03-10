@@ -11,7 +11,10 @@ export interface Employee {
 
 export interface Recommendation {
   meritPct: number;
-  rating: string;
+  performanceRating: 1 | 2 | 3;
+  bonusTargetPercent?: number | null;
+  bonusPayoutPercent: number;
+  bonusPayoutAmount: number;
   notes: string;
   status: 'Draft' | 'Submitted' | 'Approved' | 'Flagged';
   updatedAt?: string;

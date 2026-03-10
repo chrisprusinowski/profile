@@ -17,15 +17,28 @@ export function Executive({ employees, cycle, recommendations }: Props) {
   // ── Status counts ──────────────────────────────────────────
   const statusCounts = { Draft: 0, Submitted: 0, Approved: 0, Flagged: 0 };
   let allocated = 0;
+  let bonusAllocated = 0;
   let sumPct = 0;
   let flaggedDollar = 0;
+  const performanceDistribution: Record<string, number> = {
+    '1': 0,
+    '2': 0,
+    '3': 0,
+    Unrated: 0
+  };
 
   for (const e of employees) {
     const rec = recommendations[e.id];
     const pct = rec?.meritPct ?? 0;
     const inc = e.salary * (pct / 100);
     allocated += inc;
+    bonusAllocated += rec?.bonusPayoutAmount ?? 0;
     sumPct += pct;
+    const ratingKey = rec?.performanceRating
+      ? String(rec.performanceRating)
+      : 'Unrated';
+    performanceDistribution[ratingKey] =
+      (performanceDistribution[ratingKey] ?? 0) + 1;
     const s = (rec?.status ?? 'Draft') as keyof typeof statusCounts;
     statusCounts[s] = (statusCounts[s] ?? 0) + 1;
     if (s === 'Flagged') flaggedDollar += inc;
@@ -33,13 +46,22 @@ export function Executive({ employees, cycle, recommendations }: Props) {
 
   const avgPct = employees.length ? sumPct / employees.length : 0;
   const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
-  const submitted = statusCounts.Submitted + statusCounts.Approved + statusCounts.Flagged;
+  const submitted =
+    statusCounts.Submitted + statusCounts.Approved + statusCounts.Flagged;
 
   // ── Department rollup ──────────────────────────────────────
-  const deptMap: Record<string, { payroll: number; allocated: number; headcount: number; submitted: number }> = {};
+  const deptMap: Record<
+    string,
+    { payroll: number; allocated: number; headcount: number; submitted: number }
+  > = {};
   for (const e of employees) {
     const d = e.department ?? 'Unassigned';
-    deptMap[d] = deptMap[d] ?? { payroll: 0, allocated: 0, headcount: 0, submitted: 0 };
+    deptMap[d] = deptMap[d] ?? {
+      payroll: 0,
+      allocated: 0,
+      headcount: 0,
+      submitted: 0
+    };
     deptMap[d].payroll += e.salary;
     deptMap[d].headcount += 1;
     const rec = recommendations[e.id];
@@ -56,11 +78,17 @@ export function Executive({ employees, cycle, recommendations }: Props) {
       payroll: stats.payroll,
       allocated: stats.allocated,
       meritPct: stats.payroll ? (stats.allocated / stats.payroll) * 100 : 0,
-      submittedPct: stats.headcount ? stats.submitted / stats.headcount : 0,
+      submittedPct: stats.headcount ? stats.submitted / stats.headcount : 0
     }));
 
-  const maxAlloc = Math.max(...deptRows.map((r) => r.allocated), 1);
-  const barPalette = ['#4F46E5', '#0891B2', '#059669', '#D97706', '#DC2626', '#7C3AED'];
+  const barPalette = [
+    '#4F46E5',
+    '#0891B2',
+    '#059669',
+    '#D97706',
+    '#DC2626',
+    '#7C3AED'
+  ];
 
   // ── Distribution of merit % ────────────────────────────────
   const buckets = [
@@ -70,7 +98,7 @@ export function Executive({ employees, cycle, recommendations }: Props) {
     { label: '4–6%', count: 0 },
     { label: '6–8%', count: 0 },
     { label: `8–${guidelineMax}%`, count: 0 },
-    { label: `>${guidelineMax}%`, count: 0 },
+    { label: `>${guidelineMax}%`, count: 0 }
   ];
   for (const e of employees) {
     const pct = recommendations[e.id]?.meritPct ?? 0;
@@ -92,7 +120,9 @@ export function Executive({ employees, cycle, recommendations }: Props) {
           <div className="page-subtitle">{cycle?.name ?? 'Merit Cycle'}</div>
         </div>
         <div className="topbar-right">
-          <span className={`badge ${cycle?.status === 'open' ? 'badge-green' : 'badge-gray'}`}>
+          <span
+            className={`badge ${cycle?.status === 'open' ? 'badge-green' : 'badge-gray'}`}
+          >
             {cycle?.status === 'open' ? '● Cycle Open' : '○ Cycle Closed'}
           </span>
         </div>
@@ -100,18 +130,27 @@ export function Executive({ employees, cycle, recommendations }: Props) {
 
       <div className="page-content">
         {/* KPI row */}
-        <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+        <div
+          className="metrics-grid"
+          style={{
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))'
+          }}
+        >
           <div className="metric-card">
             <div className="metric-icon blue">$</div>
             <div className="metric-label">Total Budget</div>
             <div className="metric-value">{fmtK(budgetTotal)}</div>
-            <div className="metric-sub">{(cycle?.budgetPct ?? 3.5).toFixed(1)}% of payroll</div>
+            <div className="metric-sub">
+              {(cycle?.budgetPct ?? 3.5).toFixed(1)}% of payroll
+            </div>
           </div>
           <div className="metric-card">
             <div className="metric-icon green">↑</div>
             <div className="metric-label">Merit Allocated</div>
             <div className="metric-value">{fmtK(allocated)}</div>
-            <div className="metric-sub">{Math.round(pctUsed * 100)}% of budget</div>
+            <div className="metric-sub">
+              {Math.round(pctUsed * 100)}% of budget
+            </div>
           </div>
           <div className="metric-card">
             <div className="metric-icon blue">%</div>
@@ -123,23 +162,64 @@ export function Executive({ employees, cycle, recommendations }: Props) {
             <div className="metric-icon amber">⚠</div>
             <div className="metric-label">Flagged</div>
             <div className="metric-value">{statusCounts.Flagged}</div>
-            <div className="metric-sub">{fmtK(flaggedDollar)} in flagged increases</div>
+            <div className="metric-sub">
+              {fmtK(flaggedDollar)} in flagged increases
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-icon green">✓</div>
+            <div className="metric-label">Bonus Payout</div>
+            <div className="metric-value">{fmtK(bonusAllocated)}</div>
+            <div className="metric-sub">Total planned payout</div>
           </div>
           <div className="metric-card">
             <div className="metric-icon green">✓</div>
             <div className="metric-label">Submitted</div>
-            <div className="metric-value">{submitted} / {employees.length}</div>
-            <div className="metric-sub">{employees.length - submitted} still pending</div>
+            <div className="metric-value">
+              {submitted} / {employees.length}
+            </div>
+            <div className="metric-sub">
+              {employees.length - submitted} still pending
+            </div>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header">
+            <div className="card-title">Performance Rating Distribution</div>
+          </div>
+          <div
+            className="card-body"
+            style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}
+          >
+            {Object.entries(performanceDistribution).map(([label, count]) => (
+              <span
+                key={label}
+                className="badge badge-gray"
+                style={{ fontSize: 13, padding: '8px 10px' }}
+              >
+                {label}: {count}
+              </span>
+            ))}
           </div>
         </div>
 
         {/* Department breakdown + distribution */}
-        <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 20, marginBottom: 20 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '3fr 2fr',
+            gap: 20,
+            marginBottom: 20
+          }}
+        >
           <div className="card">
             <div className="card-header">
               <div>
                 <div className="card-title">Budget by Department</div>
-                <div className="card-subtitle">Merit allocation vs headcount</div>
+                <div className="card-subtitle">
+                  Merit allocation vs headcount
+                </div>
               </div>
             </div>
             <div className="card-body" style={{ padding: 0 }}>
@@ -158,7 +238,16 @@ export function Executive({ employees, cycle, recommendations }: Props) {
                   {deptRows.map((row, i) => (
                     <tr key={row.dept}>
                       <td>
-                        <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: barPalette[i % barPalette.length], marginRight: 8 }} />
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            width: 10,
+                            height: 10,
+                            borderRadius: 3,
+                            background: barPalette[i % barPalette.length],
+                            marginRight: 8
+                          }}
+                        />
                         {row.dept}
                       </td>
                       <td className="numeric">{row.headcount}</td>
@@ -180,7 +269,9 @@ export function Executive({ employees, cycle, recommendations }: Props) {
             </div>
             <div className="card-footer">
               <span className="text-muted">Total allocated</span>
-              <span className="fw-700">{fmt(allocated)} of {fmtK(budgetTotal)}</span>
+              <span className="fw-700">
+                {fmt(allocated)} of {fmtK(budgetTotal)}
+              </span>
             </div>
           </div>
 
@@ -189,21 +280,37 @@ export function Executive({ employees, cycle, recommendations }: Props) {
             <div className="card-header">
               <div>
                 <div className="card-title">Merit % Distribution</div>
-                <div className="card-subtitle">Employee count by increase range</div>
+                <div className="card-subtitle">
+                  Employee count by increase range
+                </div>
               </div>
             </div>
             <div className="card-body">
               <div className="bar-chart">
                 {buckets.map((b, i) => {
-                  const width = maxBucket ? Math.max((b.count / maxBucket) * 100, b.count ? 4 : 0) : 0;
-                  const color = i === 0 ? '#9CA3AF' : i === buckets.length - 1 ? '#DC2626' : barPalette[i % barPalette.length];
+                  const width = maxBucket
+                    ? Math.max((b.count / maxBucket) * 100, b.count ? 4 : 0)
+                    : 0;
+                  const color =
+                    i === 0
+                      ? '#9CA3AF'
+                      : i === buckets.length - 1
+                        ? '#DC2626'
+                        : barPalette[i % barPalette.length];
                   return (
                     <div className="bar-chart-row" key={b.label}>
-                      <div className="bar-chart-label" style={{ width: 80 }}>{b.label}</div>
-                      <div className="bar-chart-bar-wrap">
-                        <div className="bar-chart-bar" style={{ width: `${width}%`, background: color }} />
+                      <div className="bar-chart-label" style={{ width: 80 }}>
+                        {b.label}
                       </div>
-                      <div className="bar-chart-val" style={{ width: 40 }}>{b.count}</div>
+                      <div className="bar-chart-bar-wrap">
+                        <div
+                          className="bar-chart-bar"
+                          style={{ width: `${width}%`, background: color }}
+                        />
+                      </div>
+                      <div className="bar-chart-val" style={{ width: 40 }}>
+                        {b.count}
+                      </div>
                     </div>
                   );
                 })}
@@ -211,9 +318,18 @@ export function Executive({ employees, cycle, recommendations }: Props) {
               <div className="divider" />
               <div style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>
                 {statusCounts.Flagged > 0 && (
-                  <div className="alert alert-amber" style={{ margin: 0, padding: '8px 12px' }}>
-                    <div className="alert-icon" style={{ fontSize: 13 }}>⚠</div>
-                    <div>{statusCounts.Flagged} increase{statusCounts.Flagged !== 1 ? 's' : ''} exceed {guidelineMax}% guideline</div>
+                  <div
+                    className="alert alert-amber"
+                    style={{ margin: 0, padding: '8px 12px' }}
+                  >
+                    <div className="alert-icon" style={{ fontSize: 13 }}>
+                      ⚠
+                    </div>
+                    <div>
+                      {statusCounts.Flagged} increase
+                      {statusCounts.Flagged !== 1 ? 's' : ''} exceed{' '}
+                      {guidelineMax}% guideline
+                    </div>
                   </div>
                 )}
               </div>
@@ -229,20 +345,61 @@ export function Executive({ employees, cycle, recommendations }: Props) {
           <div className="card-body">
             <div style={{ display: 'flex', gap: 40, alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 4 }}>Total Budget</div>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>{fmtK(budgetTotal)}</div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--gray-500)',
+                    marginBottom: 4
+                  }}
+                >
+                  Total Budget
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>
+                  {fmtK(budgetTotal)}
+                </div>
               </div>
               <div style={{ fontSize: 28, color: 'var(--gray-300)' }}>→</div>
               <div>
-                <div style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 4 }}>Allocated</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: pctUsed > 1 ? 'var(--red-600)' : 'var(--green-600)' }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--gray-500)',
+                    marginBottom: 4
+                  }}
+                >
+                  Allocated
+                </div>
+                <div
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 800,
+                    color: pctUsed > 1 ? 'var(--red-600)' : 'var(--green-600)'
+                  }}
+                >
                   {fmtK(allocated)}
                 </div>
               </div>
               <div style={{ fontSize: 28, color: 'var(--gray-300)' }}>→</div>
               <div>
-                <div style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 4 }}>Remaining</div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: budgetTotal - allocated < 0 ? 'var(--red-600)' : 'var(--gray-900)' }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: 'var(--gray-500)',
+                    marginBottom: 4
+                  }}
+                >
+                  Remaining
+                </div>
+                <div
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 800,
+                    color:
+                      budgetTotal - allocated < 0
+                        ? 'var(--red-600)'
+                        : 'var(--gray-900)'
+                  }}
+                >
                   {fmtK(budgetTotal - allocated)}
                 </div>
               </div>
@@ -253,9 +410,19 @@ export function Executive({ employees, cycle, recommendations }: Props) {
                 style={{ width: `${Math.min(pctUsed * 100, 100)}%` }}
               />
             </div>
-            <div style={{ marginTop: 8, fontSize: 13, color: 'var(--gray-500)', display: 'flex', justifyContent: 'space-between' }}>
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 13,
+                color: 'var(--gray-500)',
+                display: 'flex',
+                justifyContent: 'space-between'
+              }}
+            >
               <span>0%</span>
-              <span style={{ fontWeight: 600, color: 'var(--gray-800)' }}>{Math.round(pctUsed * 100)}% used</span>
+              <span style={{ fontWeight: 600, color: 'var(--gray-800)' }}>
+                {Math.round(pctUsed * 100)}% used
+              </span>
               <span>100%</span>
             </div>
           </div>

@@ -1,4 +1,10 @@
-import type { AppUser, Cycle, Employee, Recommendation, RecommendationMap } from '../types.js';
+import type {
+  AppUser,
+  Cycle,
+  Employee,
+  Recommendation,
+  RecommendationMap
+} from '../types.js';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
 const LS_DEMO_USER_EMAIL = 'mc_demo_user_email';
@@ -37,7 +43,7 @@ const DEFAULT_CYCLE: Cycle = {
   budgetTotal: 0,
   guidelineMin: 0,
   guidelineMax: 10,
-  status: 'open',
+  status: 'open'
 };
 
 function lsGetCycle(): Cycle {
@@ -77,20 +83,22 @@ async function parseError(res: Response, fallback: string): Promise<Error> {
 
 function requireApi() {
   if (!API_BASE) {
-    throw new Error('VITE_API_URL is required for this operation in demo mode.');
+    throw new Error(
+      'VITE_API_URL is required for this operation in demo mode.'
+    );
   }
 }
 
 function getAuthHeaders() {
   return {
-    'x-demo-user-email': getDemoUserEmail(),
+    'x-demo-user-email': getDemoUserEmail()
   };
 }
 
 async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
   const headers = {
     ...(init?.headers ?? {}),
-    ...getAuthHeaders(),
+    ...getAuthHeaders()
   };
 
   return fetch(url, { ...init, headers });
@@ -99,7 +107,12 @@ async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
 async function readApiData<T>(res: Response, fallback: string): Promise<T> {
   if (!res.ok) throw await parseError(res, fallback);
   const body = (await res.json()) as ApiResponse<T> | T;
-  if (typeof body === 'object' && body !== null && 'data' in body && body.data !== undefined) {
+  if (
+    typeof body === 'object' &&
+    body !== null &&
+    'data' in body &&
+    body.data !== undefined
+  ) {
     return body.data as T;
   }
   return body as T;
@@ -108,39 +121,65 @@ async function readApiData<T>(res: Response, fallback: string): Promise<T> {
 export async function fetchCurrentUser(): Promise<AppUser> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/users/me`);
-  return readApiData<AppUser>(res, `Failed to load current user: ${res.status}`);
+  return readApiData<AppUser>(
+    res,
+    `Failed to load current user: ${res.status}`
+  );
 }
 
 export async function fetchAppUsers(): Promise<AppUserRecord[]> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/users`);
-  return readApiData<AppUserRecord[]>(res, `Failed to load app users: ${res.status}`);
+  return readApiData<AppUserRecord[]>(
+    res,
+    `Failed to load app users: ${res.status}`
+  );
 }
 
-export async function createAppUser(payload: { email: string; role: AppUser['role']; managerName?: string; isActive?: boolean }): Promise<AppUserRecord> {
+export async function createAppUser(payload: {
+  email: string;
+  role: AppUser['role'];
+  managerName?: string;
+  isActive?: boolean;
+}): Promise<AppUserRecord> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/users`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload)
   });
-  return readApiData<AppUserRecord>(res, `Failed to create app user: ${res.status}`);
+  return readApiData<AppUserRecord>(
+    res,
+    `Failed to create app user: ${res.status}`
+  );
 }
 
-export async function updateAppUser(email: string, payload: { role?: AppUser['role']; managerName?: string; isActive?: boolean }): Promise<AppUserRecord> {
+export async function updateAppUser(
+  email: string,
+  payload: { role?: AppUser['role']; managerName?: string; isActive?: boolean }
+): Promise<AppUserRecord> {
   requireApi();
-  const res = await authedFetch(`${API_BASE}/api/v1/users/${encodeURIComponent(email)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  return readApiData<AppUserRecord>(res, `Failed to update app user: ${res.status}`);
+  const res = await authedFetch(
+    `${API_BASE}/api/v1/users/${encodeURIComponent(email)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  );
+  return readApiData<AppUserRecord>(
+    res,
+    `Failed to update app user: ${res.status}`
+  );
 }
 
 export async function fetchEmployees(): Promise<Employee[]> {
   if (!API_BASE) return [];
   const res = await authedFetch(`${API_BASE}/api/v1/employees`);
-  return readApiData<Employee[]>(res, `Failed to load employees: ${res.status}`);
+  return readApiData<Employee[]>(
+    res,
+    `Failed to load employees: ${res.status}`
+  );
 }
 
 export async function createEmployee(employee: Employee): Promise<Employee> {
@@ -148,18 +187,21 @@ export async function createEmployee(employee: Employee): Promise<Employee> {
   const res = await authedFetch(`${API_BASE}/api/v1/employees`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(employee),
+    body: JSON.stringify(employee)
   });
 
   return readApiData<Employee>(res, `Failed to create employee: ${res.status}`);
 }
 
-export async function updateEmployee(id: string, employee: Omit<Employee, 'id'>): Promise<Employee> {
+export async function updateEmployee(
+  id: string,
+  employee: Omit<Employee, 'id'>
+): Promise<Employee> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/employees/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(employee),
+    body: JSON.stringify(employee)
   });
 
   return readApiData<Employee>(res, `Failed to update employee: ${res.status}`);
@@ -168,27 +210,37 @@ export async function updateEmployee(id: string, employee: Omit<Employee, 'id'>)
 export async function deleteEmployee(id: string): Promise<void> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/employees/${id}`, {
-    method: 'DELETE',
+    method: 'DELETE'
   });
 
-  await readApiData<{ id: string }>(res, `Failed to delete employee: ${res.status}`);
+  await readApiData<{ id: string }>(
+    res,
+    `Failed to delete employee: ${res.status}`
+  );
 }
 
-export async function importEmployeesCsv(payload: { csvContent?: string; filePath?: string }): Promise<CsvImportSummary> {
+export async function importEmployeesCsv(payload: {
+  csvContent?: string;
+  filePath?: string;
+}): Promise<CsvImportSummary> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/employees/import-csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload)
   });
 
-  return readApiData<CsvImportSummary>(res, `Failed to import employees CSV: ${res.status}`);
+  return readApiData<CsvImportSummary>(
+    res,
+    `Failed to import employees CSV: ${res.status}`
+  );
 }
 
 export async function fetchCycle(): Promise<Cycle> {
   if (API_BASE) {
     const res = await authedFetch(`${API_BASE}/api/v1/cycle`);
-    if (!res.ok) throw await parseError(res, `Failed to load cycle: ${res.status}`);
+    if (!res.ok)
+      throw await parseError(res, `Failed to load cycle: ${res.status}`);
     return res.json() as Promise<Cycle>;
   }
   return lsGetCycle();
@@ -199,9 +251,10 @@ export async function saveCycle(cycle: Cycle): Promise<Cycle> {
     const res = await authedFetch(`${API_BASE}/api/v1/cycle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cycle),
+      body: JSON.stringify(cycle)
     });
-    if (!res.ok) throw await parseError(res, `Failed to save cycle: ${res.status}`);
+    if (!res.ok)
+      throw await parseError(res, `Failed to save cycle: ${res.status}`);
     return res.json() as Promise<Cycle>;
   }
   localStorage.setItem(LS_CYCLE, JSON.stringify(cycle));
@@ -211,37 +264,67 @@ export async function saveCycle(cycle: Cycle): Promise<Cycle> {
 export async function fetchRecommendations(): Promise<RecommendationMap> {
   if (API_BASE) {
     const res = await authedFetch(`${API_BASE}/api/v1/recommendations`);
-    if (!res.ok) throw await parseError(res, `Failed to load recommendations: ${res.status}`);
+    if (!res.ok)
+      throw await parseError(
+        res,
+        `Failed to load recommendations: ${res.status}`
+      );
     return res.json() as Promise<RecommendationMap>;
   }
   return lsGetRecs();
 }
 
-export async function saveRecommendation(employeeId: string, data: Partial<Recommendation>): Promise<void> {
+export async function saveRecommendation(
+  employeeId: string,
+  data: Partial<Recommendation>
+): Promise<void> {
   if (API_BASE) {
-    const res = await authedFetch(`${API_BASE}/api/v1/recommendations/${employeeId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw await parseError(res, `Failed to save recommendation: ${res.status}`);
+    const res = await authedFetch(
+      `${API_BASE}/api/v1/recommendations/${employeeId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }
+    );
+    if (!res.ok)
+      throw await parseError(
+        res,
+        `Failed to save recommendation: ${res.status}`
+      );
     return;
   }
   const recs = lsGetRecs();
   const existing = recs[employeeId] ?? {
     meritPct: 0,
-    rating: 'Meets Expectations',
+    performanceRating: 2,
+    bonusTargetPercent: null,
+    bonusPayoutPercent: 0,
+    bonusPayoutAmount: 0,
     notes: '',
-    status: 'Draft' as const,
+    status: 'Draft' as const
   };
-  recs[employeeId] = { ...existing, ...data, updatedAt: new Date().toISOString() };
+  recs[employeeId] = {
+    ...existing,
+    ...data,
+    updatedAt: new Date().toISOString()
+  };
   localStorage.setItem(LS_RECS, JSON.stringify(recs));
 }
 
-export async function submitAllRecommendations(employeeIds: string[]): Promise<void> {
+export async function submitAllRecommendations(
+  employeeIds: string[]
+): Promise<void> {
   if (API_BASE) {
-    const res = await authedFetch(`${API_BASE}/api/v1/recommendations/submit-all`, { method: 'POST' });
-    if (!res.ok) throw await parseError(res, `Failed to submit recommendations: ${res.status}`);
+    const res = await authedFetch(
+      `${API_BASE}/api/v1/recommendations/submit-all`,
+      { method: 'POST' }
+    );
+    if (!res.ok)
+      throw await parseError(
+        res,
+        `Failed to submit recommendations: ${res.status}`
+      );
     return;
   }
   const recs = lsGetRecs();
@@ -249,9 +332,16 @@ export async function submitAllRecommendations(employeeIds: string[]): Promise<v
     const rec = recs[id];
     if (!rec || rec.status === 'Draft') {
       recs[id] = {
-        ...(rec ?? { meritPct: 0, rating: 'Meets Expectations', notes: '' }),
+        ...(rec ?? {
+          meritPct: 0,
+          performanceRating: 2,
+          bonusTargetPercent: null,
+          bonusPayoutPercent: 0,
+          bonusPayoutAmount: 0,
+          notes: ''
+        }),
         status: 'Submitted',
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
     }
   }
