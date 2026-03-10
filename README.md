@@ -1,146 +1,116 @@
-# MeritCycle MVP (Local Full-Stack)
+# MeritCycle MVP (PostgreSQL-first local demo)
 
-Internal merit/bonus planning MVP for local testing.
+Internal merit/bonus planning tool for local full-stack demos.
 
-This repository contains:
-- `apps/client`: React + Vite UI (main local app)
-- `apps/api`: Express + TypeScript API
-- `infra/postgres/migrations`: PostgreSQL schema and seed migration SQL
-- `data/employees.csv`: employee roster source file watched by the API
+## What changed in this demo-ready setup
 
----
-
-## 1) Prerequisites
-
-- Node.js 22+
-- npm 10+
-- Docker + Docker Compose
+- PostgreSQL is the **primary source of truth** for employees, cycle settings, and recommendations.
+- `data/employees.csv` is now **import-only** (seed/input), not live storage.
+- Employee CRUD is available through the API and client UI.
 
 ---
 
-## 2) Happy-path local run (recommended)
-
-### Step A: install dependencies
+## 1) Install dependencies
 
 ```bash
 npm ci
 ```
 
-### Step B: create local env files
+## 2) Create local env files
 
 ```bash
 cp .env.example .env
-cp apps/client/.env.example apps/client/.env.local
 cp apps/api/.env.example apps/api/.env
+cp apps/client/.env.example apps/client/.env.local
 ```
 
-### Step C: start PostgreSQL
+Ensure `apps/client/.env.local` includes:
+
+```bash
+VITE_API_URL=http://localhost:4000
+```
+
+## 3) Start PostgreSQL
 
 ```bash
 npm run dev:postgres
 ```
 
-### Step D: run DB migrations
+## 4) Run migrations
 
 ```bash
 npm run db:migrate
 ```
 
-### Step E: start API (terminal 1)
+## 5) Start API
 
 ```bash
 npm run dev:api
 ```
 
-### Step F: start client (terminal 2)
+## 6) Start client
 
 ```bash
 npm run dev:client
 ```
 
-### Step G: open app
-
-- `http://localhost:5173`
-
-The API watches `data/employees.csv` and reloads employee data automatically after file updates.
+Open: `http://localhost:5173`
 
 ---
 
-## 3) Core MVP workflow to test
+## 7) Import employee CSV into PostgreSQL
 
-1. Open Dashboard.
-2. Go to Employees and verify roster loads from `data/employees.csv`.
-3. Go to Merit and edit recommendation values.
-4. Save recommendations.
-5. Go to Admin and update cycle settings, then save.
-6. Check Dashboard/Executive pages for budget/summary rollups.
+### Option A (UI)
+1. Open **Employees** page.
+2. Paste CSV text into **Import Employees from CSV**.
+3. Click **Import CSV to PostgreSQL**.
 
----
+Required CSV columns:
 
-## 4) Environment variables
+`id, name, email, department, title, salary, manager, hire_date`
 
-### API (`apps/api/.env`)
-- `PORT` (default `4000`)
-- `DATABASE_URL` (required)
-- `NODE_ENV` (default `development`)
-
-### Client (`apps/client/.env.local`)
-- `VITE_API_URL` (set for local full-stack mode)
-- `VITE_BASE_URL` (`/` for local, `/profile/` for GH Pages)
-
----
-
-## 5) Useful scripts
-
-From repo root:
+### Option B (API)
 
 ```bash
-npm run dev:postgres   # start postgres only
-npm run db:migrate     # apply all SQL migrations in order
-npm run dev:api        # run API in watch mode
-npm run dev:client     # run client in Vite dev mode
-npm run test --workspace=api
-npm run typecheck --workspace=api
+curl -X POST http://localhost:4000/api/v1/employees/import-csv \
+  -H 'Content-Type: application/json' \
+  -d @- <<'JSON'
+{
+  "filePath": "./data/employees.csv"
+}
+JSON
 ```
 
 ---
 
-## 6) Troubleshooting
+## 8) Demo employee add/edit/delete
 
-### API says database connection failed
-- Ensure postgres is running: `docker compose ps`
-- Ensure `DATABASE_URL` points to `localhost:5432` for local dev
-- Re-run migrations: `npm run db:migrate`
+1. Go to **Employees**.
+2. Use **Add / Edit Employee** form to add a record.
+3. Click **Edit** on a row and save changes.
+4. Click **Delete** and confirm removal.
 
-### Employees page is empty
-- Confirm file exists: `data/employees.csv`
-- Check API logs for `[csvWatcher]` warnings about malformed or missing columns
-- Required CSV columns: at least `name` and `salary`
-
-### Client can’t load data
-- Confirm API is up at `http://localhost:4000/health`
-- Confirm `apps/client/.env.local` contains `VITE_API_URL=http://localhost:4000`
-- Restart client after env changes
-
-### Need static/demo mode
-- Remove `VITE_API_URL` from client env to use bundled CSV + localStorage fallback.
+All changes persist in PostgreSQL.
 
 ---
 
-## 7) Key files for beginners
+## 9) Helpful API endpoints
 
-- API entry: `apps/api/src/index.ts`
-- API routes: `apps/api/src/routes/*`
-- CSV watcher: `apps/api/src/csvWatcher.ts`
-- Client entry: `apps/client/src/main.tsx`
-- Client API layer: `apps/client/src/api/client.ts`
-- Main pages: `apps/client/src/pages/*`
-- DB migrations: `infra/postgres/migrations/*.sql`
+- `GET /api/v1/employees`
+- `POST /api/v1/employees`
+- `PUT /api/v1/employees/:id`
+- `DELETE /api/v1/employees/:id`
+- `POST /api/v1/employees/import-csv`
+- `GET /api/v1/cycle`
+- `POST /api/v1/cycle`
+- `GET /api/v1/recommendations`
+- `PUT /api/v1/recommendations/:employeeId`
 
-## 8) Beginner notes on env files
+---
 
-Edit these files only if you need non-default ports/credentials:
+## 10) Known limitations (intentional for MVP)
 
-- `.env` (shared Docker/database defaults)
-- `apps/api/.env` (API runtime vars; loaded automatically when API starts)
-- `apps/client/.env.local` (client runtime vars for Vite)
+- No auth/SSO or fine-grained permissions yet.
+- CSV import currently supports JSON payload (`csvContent` or `filePath`) rather than multipart upload.
+- Basic single-instance local workflow; no advanced concurrency controls.
+- No CSV write-back to disk.
