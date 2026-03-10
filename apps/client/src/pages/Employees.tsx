@@ -15,6 +15,7 @@ interface Props {
   recommendations: RecommendationMap;
   showToast: (msg: string) => void;
   refreshAll: () => Promise<void>;
+  readOnly?: boolean;
 }
 
 interface EmployeeFormState {
@@ -52,7 +53,7 @@ function employeeToForm(employee: Employee): EmployeeFormState {
   };
 }
 
-export function Employees({ employees, showToast, refreshAll }: Props) {
+export function Employees({ employees, showToast, refreshAll, readOnly = false }: Props) {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [rows, setRows] = useState(employees);
@@ -189,7 +190,7 @@ export function Employees({ employees, showToast, refreshAll }: Props) {
       </header>
 
       <div className="page-content">
-        <div className="card mb-20">
+        {!readOnly && <div className="card mb-20">
           <div className="card-header"><div className="card-title">Add / Edit Employee</div></div>
           <div className="card-body">
             <form onSubmit={handleSubmitEmployee}>
@@ -221,9 +222,9 @@ export function Employees({ employees, showToast, refreshAll }: Props) {
               </div>
             </form>
           </div>
-        </div>
+        </div>}
 
-        <div className="card mb-20">
+        {!readOnly && <div className="card mb-20">
           <div className="card-header"><div className="card-title">Import Employees from CSV</div></div>
           <div className="card-body">
             <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>Paste CSV (required columns: id, name, email, department, title, salary, manager, hire_date).</p>
@@ -235,7 +236,9 @@ export function Employees({ employees, showToast, refreshAll }: Props) {
               </div>
             )}
           </div>
-        </div>
+        </div>}
+
+        {readOnly && <div className="alert" style={{ marginBottom: 12 }}>Read-only employee roster for your role.</div>}
 
         {rows.length === 0 ? (
           <div className="table-wrap">
@@ -262,7 +265,7 @@ export function Employees({ employees, showToast, refreshAll }: Props) {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Name</th><th>Department</th><th>Title</th><th className="numeric">Salary</th><th>Manager</th><th>Hire Date</th><th>Actions</th>
+                    <th>Name</th><th>Department</th><th>Title</th><th className="numeric">Salary</th><th>Manager</th><th>Hire Date</th>{!readOnly && <th>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -279,12 +282,12 @@ export function Employees({ employees, showToast, refreshAll }: Props) {
                       <td className="numeric">{fmt(e.salary)}</td>
                       <td>{e.manager ?? '—'}</td>
                       <td>{fmtDate(e.hireDate)}</td>
-                      <td>
+                      {!readOnly && <td>
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => { setEditingId(e.id); setForm(employeeToForm(e)); }}>Edit</button>
                           <button className="btn btn-danger btn-sm" onClick={() => { void handleDelete(e.id); }}>Delete</button>
                         </div>
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                 </tbody>

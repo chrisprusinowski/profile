@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireRole, type AuthenticatedRequest } from '../auth.js';
 import { pool } from '../db.js';
 
 export const cycleRouter = Router();
@@ -44,7 +45,8 @@ cycleRouter.get('/', async (_req, res, next) => {
   }
 });
 
-cycleRouter.post('/', async (req, res, next) => {
+cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin'])) return;
   try {
     const {
       name,

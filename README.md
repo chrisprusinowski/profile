@@ -94,7 +94,27 @@ All changes persist in PostgreSQL.
 
 ---
 
-## 9) Helpful API endpoints
+
+## 9) Demo role-based access (local MVP)
+
+This repo now includes a demo-only role model backed by PostgreSQL `app_users` and request header identity (`x-demo-user-email`).
+
+### Roles
+- `admin`: full access, can edit cycle settings, employee CRUD/import, and manage app users.
+- `executive`: read-only access to all employees/recommendations and reporting views.
+- `manager`: scoped to employees where `employees.manager` matches `app_users.manager_name`; can edit recommendations for that scoped team only.
+
+### Seeded demo users
+- `admin@demo.com` → `admin`
+- `executive@demo.com` → `executive`
+- `manager1@demo.com` → `manager` (scope: `Jamie Rivera`)
+- `manager2@demo.com` → `manager` (scope: `Jordan Pike`)
+
+The client includes a **Local Demo Mode** user switcher in the sidebar so you can quickly switch users for demos.
+
+---
+
+## 10) Helpful API endpoints
 
 - `GET /api/v1/employees`
 - `POST /api/v1/employees`
@@ -108,9 +128,9 @@ All changes persist in PostgreSQL.
 
 ---
 
-## 10) Known limitations (intentional for MVP)
+## 11) Known limitations (intentional for MVP)
 
-- No auth/SSO or fine-grained permissions yet.
+- No production authentication/SSO yet (current identity is demo-only header-based switching).
 - CSV import currently supports JSON payload (`csvContent` or `filePath`) rather than multipart upload.
 - Basic single-instance local workflow; no advanced concurrency controls.
 - No CSV write-back to disk.

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { readFile } from 'fs/promises';
 import { z } from 'zod';
+import { getManagerScopeName, requireRole, type AuthenticatedRequest } from '../auth.js';
 import { pool } from '../db.js';
 
 export const employeesRouter = Router();
@@ -57,33 +58,50 @@ function parseDateInput(value: string | undefined): string | null {
   return date.toISOString().slice(0, 10);
 }
 
-async function fetchEmployeesFromDb() {
-  const result = await pool.query(
-    `SELECT id,
-            name,
-            email,
-            department,
-            title,
-            salary::float AS salary,
-            manager,
-            to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
-     FROM employees
-     ORDER BY name ASC, id ASC`,
-  );
+async function fetchEmployeesFromDb(managerScopeName: string | null) {
+  const result = managerScopeName
+    ? await pool.query(
+      `SELECT id,
+              name,
+              email,
+              department,
+              title,
+              salary::float AS salary,
+              manager,
+              to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
+       FROM employees
+       WHERE lower(manager) = lower($1)
+       ORDER BY name ASC, id ASC`,
+      [managerScopeName],
+    )
+    : await pool.query(
+      `SELECT id,
+              name,
+              email,
+              department,
+              title,
+              salary::float AS salary,
+              manager,
+              to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
+       FROM employees
+       ORDER BY name ASC, id ASC`,
+    );
 
   return result.rows;
 }
 
-employeesRouter.get('/', async (_req, res, next) => {
+employeesRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
-    const employees = await fetchEmployeesFromDb();
+    const managerScopeName = getManagerScopeName(req.user!);
+    const employees = await fetchEmployeesFromDb(managerScopeName);
     res.json({ success: true, data: employees });
   } catch (error) {
     next(error);
   }
 });
 
-employeesRouter.post('/', async (req, res, next) => {
+employeesRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin'])) return;
   try {
     const parsed = employeeSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -122,7 +140,8 @@ employeesRouter.post('/', async (req, res, next) => {
   }
 });
 
-employeesRouter.put('/:id', async (req, res, next) => {
+employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin'])) return;
   try {
     const parsed = employeeUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -169,7 +188,8 @@ employeesRouter.put('/:id', async (req, res, next) => {
   }
 });
 
-employeesRouter.delete('/:id', async (req, res, next) => {
+employeesRouter.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin'])) return;
   try {
     const result = await pool.query('DELETE FROM employees WHERE id = $1 RETURNING id', [req.params.id]);
 
@@ -184,27 +204,28 @@ employeesRouter.delete('/:id', async (req, res, next) => {
   }
 });
 
-employeesRouter.post('/import-csv', async (req, res, next) => {
+employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin'])) return;
   try {
     const payload = req.body as { csvContent?: string; filePath?: string };
     let csvContent = payload.csvContent;
 
     if (!csvContent && payload.filePath) {
-      csvContent = await readFile(payload.filePath, 'utf-8');
+      csvContent = await readFile(payload.filePath, 'utf8');
     }
 
-    if (!csvContent) {
-      res.status(400).json({ success: false, error: 'Provide csvContent or filePath' });
+    if (!csvContent || !csvContent.trim()) {
+      res.status(400).json({ success: false, error: 'csvContent is required (or provide filePath)' });
       return;
     }
 
     const lines = csvContent
       .split(/\r?\n/)
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter((line) => line.length > 0);
 
     if (lines.length < 2) {
-      res.status(400).json({ success: false, error: 'CSV must include header and at least one data row' });
+      res.status(400).json({ success: false, error: 'CSV must include a header and at least one row' });
       return;
     }
 

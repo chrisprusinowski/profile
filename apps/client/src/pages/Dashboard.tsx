@@ -5,7 +5,6 @@ interface Props {
   employees: Employee[];
   cycle: Cycle | null;
   recommendations: RecommendationMap;
-  showToast: (msg: string) => void;
 }
 
 export function Dashboard({ employees, cycle, recommendations }: Props) {
