@@ -56,6 +56,12 @@ recommendationsRouter.put('/:employeeId', async (req, res, next) => {
       return;
     }
 
+    const employeeCheck = await pool.query('SELECT 1 FROM employees WHERE id = $1', [employeeId]);
+    if (employeeCheck.rowCount === 0) {
+      res.status(404).json({ error: 'Employee not found' });
+      return;
+    }
+
     const result = await pool.query(
       `INSERT INTO merit_recommendations (cycle_id, employee_id, merit_pct, rating, notes, status)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -85,7 +91,6 @@ recommendationsRouter.post('/submit-all', async (_req, res, next) => {
       res.status(400).json({ error: 'No active cycle. Save cycle settings first.' });
       return;
     }
-
     const result = await pool.query(
       `UPDATE merit_recommendations
        SET status = 'Submitted', updated_at = NOW()

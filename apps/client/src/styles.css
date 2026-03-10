@@ -218,6 +218,8 @@ input, select, textarea { font-family: inherit; }
 .btn-primary:hover { background: var(--blue-700); border-color: var(--blue-700); }
 .btn-secondary { background: #fff; color: var(--gray-700); border-color: var(--gray-300); }
 .btn-secondary:hover { background: var(--gray-50); }
+.btn-danger { background: var(--red-600); color: #fff; border-color: var(--red-600); }
+.btn-danger:hover { filter: brightness(0.95); }
 .btn-success   { background: var(--green-600); color: #fff; border-color: var(--green-600); }
 .btn-success:hover { background: var(--green-700); }
 .btn-ghost     { background: transparent; color: var(--gray-600); border-color: transparent; }

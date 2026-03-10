@@ -51,16 +51,6 @@ export default function App() {
     void refreshAll();
   }, [refreshAll]);
 
-  // Poll for employee updates when running with the live API (file-watching backend)
-  useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL as string;
-    if (!apiUrl) return;
-    const interval = setInterval(async () => {
-      const emps = await fetchEmployees().catch(() => null);
-      if (emps) setEmployees(emps);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
 
   const flaggedCount = Object.values(recommendations).filter((r) => r.status === 'Flagged').length;
 
@@ -89,7 +79,7 @@ export default function App() {
     );
   }
 
-  const shared = { employees, cycle, recommendations, showToast, refreshRecommendations, setCycle };
+  const shared = { employees, cycle, recommendations, showToast, refreshRecommendations, setCycle, refreshAll };
 
   return (
     <>

@@ -28,7 +28,6 @@ export const createApp = () => {
       return res.status(503).json({
         status: 'error',
         message: 'Database connection failed',
-        detail: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });
@@ -46,7 +45,7 @@ export const createApp = () => {
     console.error('[api] Unhandled route error:', error);
     res.status(500).json({
       error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: 'An unexpected error occurred',
     });
   });
 

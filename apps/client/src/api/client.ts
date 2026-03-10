@@ -1,68 +1,21 @@
-/**
- * API client — dual-mode:
- *   • VITE_API_URL set → calls the live Express API (local dev / self-hosted)
- *   • Not set → reads employees from __STATIC_CSV__ (bundled at Vite build time)
- *               and stores recommendations + cycle in localStorage (GitHub Pages)
- */
 import type { Cycle, Employee, Recommendation, RecommendationMap } from '../types.js';
-
-declare const __STATIC_CSV__: string;
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
+type ApiResponse<T> = {
+  success: boolean;
+  data: T;
+  error?: string;
+  message?: string;
+};
 
-function parseCsv(raw: string): Employee[] {
-  const lines = raw.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
-  const headers = parseCsvLine(lines[0]).map((h) =>
-    h.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
-  );
-  return lines
-    .slice(1)
-    .filter((l) => l.trim())
-    .map((line, idx) => {
-      const vals = parseCsvLine(line);
-      const row: Record<string, string> = {};
-      headers.forEach((h, i) => {
-        row[h] = vals[i] ?? '';
-      });
-      const salary = parseFloat(row['salary'] ?? '0');
-      return {
-        id: row['id']?.trim() || `emp-${idx + 1}`,
-        name: row['name'] ?? '',
-        email: row['email'] || undefined,
-        department: row['department'] || undefined,
-        title: row['title'] || undefined,
-        salary: isNaN(salary) ? 0 : salary,
-        manager: row['manager'] || undefined,
-        hireDate: row['hire_date'] || undefined,
-      };
-    })
-    .filter((e) => e.name);
-}
+export type CsvImportSummary = {
+  rowsProcessed: number;
+  inserted: number;
+  updated: number;
+  rejected: number;
+  validationErrors: Array<{ row: number; error: string }>;
+};
 
 const LS_CYCLE = 'mc_cycle_v2';
 const LS_RECS = 'mc_recommendations_v2';
@@ -108,13 +61,67 @@ async function parseError(res: Response, fallback: string): Promise<Error> {
   }
 }
 
-export async function fetchEmployees(): Promise<Employee[]> {
-  if (API_BASE) {
-    const res = await fetch(`${API_BASE}/api/v1/employees`);
-    if (!res.ok) throw await parseError(res, `Failed to load employees: ${res.status}`);
-    return res.json() as Promise<Employee[]>;
+function requireApi() {
+  if (!API_BASE) {
+    throw new Error('VITE_API_URL is required for this operation in demo mode.');
   }
-  return parseCsv(__STATIC_CSV__);
+}
+
+async function readApiData<T>(res: Response, fallback: string): Promise<T> {
+  if (!res.ok) throw await parseError(res, fallback);
+  const body = (await res.json()) as ApiResponse<T> | T;
+  if (typeof body === 'object' && body !== null && 'success' in body && 'data' in body) {
+    return body.data;
+  }
+  return body as T;
+}
+
+export async function fetchEmployees(): Promise<Employee[]> {
+  if (!API_BASE) return [];
+  const res = await fetch(`${API_BASE}/api/v1/employees`);
+  return readApiData<Employee[]>(res, `Failed to load employees: ${res.status}`);
+}
+
+export async function createEmployee(employee: Employee): Promise<Employee> {
+  requireApi();
+  const res = await fetch(`${API_BASE}/api/v1/employees`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(employee),
+  });
+
+  return readApiData<Employee>(res, `Failed to create employee: ${res.status}`);
+}
+
+export async function updateEmployee(id: string, employee: Omit<Employee, 'id'>): Promise<Employee> {
+  requireApi();
+  const res = await fetch(`${API_BASE}/api/v1/employees/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(employee),
+  });
+
+  return readApiData<Employee>(res, `Failed to update employee: ${res.status}`);
+}
+
+export async function deleteEmployee(id: string): Promise<void> {
+  requireApi();
+  const res = await fetch(`${API_BASE}/api/v1/employees/${id}`, {
+    method: 'DELETE',
+  });
+
+  await readApiData<{ id: string }>(res, `Failed to delete employee: ${res.status}`);
+}
+
+export async function importEmployeesCsv(payload: { csvContent?: string; filePath?: string }): Promise<CsvImportSummary> {
+  requireApi();
+  const res = await fetch(`${API_BASE}/api/v1/employees/import-csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  return readApiData<CsvImportSummary>(res, `Failed to import employees CSV: ${res.status}`);
 }
 
 export async function fetchCycle(): Promise<Cycle> {
