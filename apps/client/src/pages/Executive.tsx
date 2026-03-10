@@ -15,7 +15,7 @@ export function Executive({ employees, cycle, recommendations }: Props) {
     : totalActualPayroll * ((cycle?.budgetPct ?? 3.5) / 100);
 
   // ── Status counts ──────────────────────────────────────────
-  const statusCounts = { Draft: 0, Submitted: 0, Approved: 0, Flagged: 0 };
+  const statusCounts = { Draft: 0, Submitted: 0, Locked: 0 };
   let allocated = 0;
   let bonusAllocated = 0;
   let sumPct = 0;
@@ -41,13 +41,13 @@ export function Executive({ employees, cycle, recommendations }: Props) {
       (performanceDistribution[ratingKey] ?? 0) + 1;
     const s = (rec?.status ?? 'Draft') as keyof typeof statusCounts;
     statusCounts[s] = (statusCounts[s] ?? 0) + 1;
-    if (s === 'Flagged') flaggedDollar += inc;
+    if (pct > guidelineMax) flaggedDollar += inc;
   }
 
   const avgPct = employees.length ? sumPct / employees.length : 0;
   const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
-  const submitted =
-    statusCounts.Submitted + statusCounts.Approved + statusCounts.Flagged;
+  const submitted = statusCounts.Submitted + statusCounts.Locked;
+  const guidelineFlagged = employees.filter((e) => (recommendations[e.id]?.meritPct ?? 0) > guidelineMax).length;
 
   const belowRange = employees.filter((e) => e.payRange?.bandStatus === 'below_range').length;
   const aboveRange = employees.filter((e) => e.payRange?.bandStatus === 'above_range').length;
@@ -138,12 +138,19 @@ export function Executive({ employees, cycle, recommendations }: Props) {
           <span
             className={`badge ${cycle?.status === 'open' ? 'badge-green' : 'badge-gray'}`}
           >
-            {cycle?.status === 'open' ? '● Cycle Open' : '○ Cycle Closed'}
+            {cycle?.status === 'open' ? '● Cycle Open' : cycle?.status === 'locked' ? '● Cycle Locked' : '○ Cycle Closed'}
           </span>
         </div>
       </header>
 
       <div className="page-content">
+
+        {employees.length === 0 && (
+          <div className="alert alert-blue" style={{ marginBottom: 20 }}>
+            <div className="alert-icon">ℹ</div>
+            <div>No employee data loaded yet. Import employees and pay ranges to unlock executive metrics.</div>
+          </div>
+        )}
         {/* KPI row */}
         <div
           className="metrics-grid"
@@ -175,8 +182,8 @@ export function Executive({ employees, cycle, recommendations }: Props) {
           </div>
           <div className="metric-card">
             <div className="metric-icon amber">⚠</div>
-            <div className="metric-label">Flagged</div>
-            <div className="metric-value">{statusCounts.Flagged}</div>
+            <div className="metric-label">Over Guideline</div>
+            <div className="metric-value">{guidelineFlagged}</div>
             <div className="metric-sub">
               {fmtK(flaggedDollar)} in flagged increases
             </div>
@@ -368,7 +375,7 @@ export function Executive({ employees, cycle, recommendations }: Props) {
               </div>
               <div className="divider" />
               <div style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>
-                {statusCounts.Flagged > 0 && (
+                {guidelineFlagged > 0 && (
                   <div
                     className="alert alert-amber"
                     style={{ margin: 0, padding: '8px 12px' }}
@@ -377,8 +384,8 @@ export function Executive({ employees, cycle, recommendations }: Props) {
                       ⚠
                     </div>
                     <div>
-                      {statusCounts.Flagged} increase
-                      {statusCounts.Flagged !== 1 ? 's' : ''} exceed{' '}
+                      {guidelineFlagged} increase
+                      {guidelineFlagged !== 1 ? 's' : ''} exceed{' '}
                       {guidelineMax}% guideline
                     </div>
                   </div>

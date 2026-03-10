@@ -8,8 +8,6 @@ interface Props {
 }
 
 export function Dashboard({ employees, cycle, recommendations }: Props) {
-  const guidelineMax = cycle?.guidelineMax ?? 10;
-
   // ── Budget computations ──────────────────────────────────────
   const totalActualPayroll = employees.reduce((s, e) => s + e.salary, 0);
   const budgetTotal = cycle?.budgetTotal

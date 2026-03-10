@@ -164,3 +164,16 @@ The client includes a **Local Demo Mode** user switcher in the sidebar so you ca
 ### Demo identity note
 
 Auth is intentionally local/demo-only and uses `x-demo-user-email` plus `app_users` role mapping. This is a deliberate local-review setup and not enterprise SSO.
+
+
+## Local QA hardening checklist
+
+- Startup reliability: verify load errors include retry and API/env guidance when backend is unavailable.
+- Role consistency: verify manager/executive are read-only in Employees and only admin sees Admin Settings.
+- Workflow lifecycle: verify recommendations only submit while cycle is `open`; `closed/locked` disables edits.
+- Import UX: verify employee and pay range imports show rejected row details (first 3 errors).
+- Export UX: verify export buttons show actionable toast errors when API export fails.
+- Validation: verify employee/user/pay-range forms provide inline validation for required fields and invalid values.
+- Empty/filter states: verify Employees/Merit/Admin tables show explicit “no matching rows” messaging.
+- Pay range clarity: verify Merit pay-band column shows both range status and match source when available.
+- Executive usefulness: verify over-guideline count reflects merit % > guideline max and cycle locked status is visible.

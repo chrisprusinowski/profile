@@ -41,6 +41,7 @@ export function Merit({
   const [statusFilter, setStatusFilter] = useState('');
   const [modalId, setModalId] = useState<string | null>(null);
   const [modalData, setModalData] = useState<Partial<Recommendation>>({});
+  const [savingEmployeeId, setSavingEmployeeId] = useState<string | null>(null);
 
   const guidelineMax = cycle?.guidelineMax ?? 10;
   const totalActualPayroll = employees.reduce((s, e) => s + e.salary, 0);
@@ -94,6 +95,18 @@ export function Merit({
       const locked = readOnly || cycle?.status !== 'open' || current?.status === 'Submitted' || current?.status === 'Locked';
       if (locked) return;
 
+      if (meritPct < 0) {
+        showToast('Merit % cannot be negative');
+        return;
+      }
+
+      const bonusPayoutPercent = patch.bonusPayoutPercent ?? current?.bonusPayoutPercent ?? 0;
+      const bonusPayoutAmount = patch.bonusPayoutAmount ?? current?.bonusPayoutAmount ?? 0;
+      if (bonusPayoutPercent < 0 || bonusPayoutAmount < 0) {
+        showToast('Bonus values cannot be negative');
+        return;
+      }
+
       const next: Partial<Recommendation> = {
         meritPct,
         performanceRating: (patch.performanceRating ??
@@ -101,10 +114,8 @@ export function Merit({
           2) as 1 | 2 | 3,
         bonusTargetPercent:
           patch.bonusTargetPercent ?? current?.bonusTargetPercent ?? null,
-        bonusPayoutPercent:
-          patch.bonusPayoutPercent ?? current?.bonusPayoutPercent ?? 0,
-        bonusPayoutAmount:
-          patch.bonusPayoutAmount ?? current?.bonusPayoutAmount ?? 0,
+        bonusPayoutPercent,
+        bonusPayoutAmount,
         notes: patch.notes ?? current?.notes ?? '',
         status:
           meritPct > guidelineMax
@@ -112,10 +123,17 @@ export function Merit({
             : (patch.status ?? current?.status ?? 'Draft')
       };
 
-      await saveRecommendation(employeeId, next);
-      await refreshRecommendations();
+      setSavingEmployeeId(employeeId);
+      try {
+        await saveRecommendation(employeeId, next);
+        await refreshRecommendations();
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Failed to save recommendation');
+      } finally {
+        setSavingEmployeeId(null);
+      }
     },
-    [recommendations, guidelineMax, refreshRecommendations, readOnly]
+    [cycle?.status, guidelineMax, readOnly, recommendations, refreshRecommendations, showToast]
   );
 
   const openModal = (id: string) => {
@@ -143,8 +161,8 @@ export function Merit({
     const draftIds = employees
       .filter((e) => (recommendations[e.id]?.status ?? 'Draft') === 'Draft')
       .map((e) => e.id);
-    if (readOnly) {
-      showToast('Read-only mode');
+    if (readOnly || cycle?.status !== 'open') {
+      showToast('Recommendations can only be submitted while cycle is open');
       return;
     }
     if (!draftIds.length) {
@@ -161,6 +179,7 @@ export function Merit({
   const modalEmployee = modalId
     ? employees.find((e) => e.id === modalId)
     : null;
+  const isCycleOpen = cycle?.status === 'open';
 
   return (
     <>
@@ -169,12 +188,13 @@ export function Merit({
           <div className="page-title">Comp Planning</div>
           <div className="page-subtitle">
             {readOnly ? 'Read-only mode · ' : ''}
+            {!isCycleOpen ? 'Cycle closed/locked · ' : ''}
             {filtered.length} of {employees.length} employees
           </div>
         </div>
         <div className="topbar-right">
           {!readOnly && (
-            <button className="btn btn-primary btn-sm" onClick={submitAll}>
+            <button className="btn btn-primary btn-sm" onClick={submitAll} disabled={!isCycleOpen}>
               Submit All Drafts
             </button>
           )}
@@ -265,11 +285,18 @@ export function Merit({
               </tr>
             </thead>
             <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="text-muted" style={{ textAlign: 'center', padding: 20 }}>
+                    No employees match the current filters.
+                  </td>
+                </tr>
+              )}
               {filtered.map((e) => {
                 const rec = recommendations[e.id];
                 const meritPct = rec?.meritPct ?? 0;
                 const status = rec?.status ?? 'Draft';
-                const locked = readOnly || cycle?.status !== 'open' || status === 'Submitted' || status === 'Locked';
+                const locked = readOnly || cycle?.status !== 'open' || status === 'Submitted' || status === 'Locked' || savingEmployeeId === e.id;
 
                 const pay = e.payRange;
                 const payBandLabel = pay?.bandStatus === 'below_range' ? 'Below range' : pay?.bandStatus === 'above_range' ? 'Above range' : pay?.bandStatus === 'in_range' ? 'In range' : 'No range matched';
@@ -297,7 +324,7 @@ export function Merit({
                       {pay?.matchedRangeMin != null && pay?.matchedRangeMax != null ? (
                         <div>
                           <div>{fmt(pay.matchedRangeMin)} - {fmt(pay.matchedRangeMax)}</div>
-                          <div className="employee-title">{payBandLabel}</div>
+                          <div className="employee-title">{payBandLabel}{pay?.matchedBy ? ` · ${pay.matchedBy}` : ''}</div>
                         </div>
                       ) : (
                         <span className="text-muted">No range matched</span>

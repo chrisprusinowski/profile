@@ -69,6 +69,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
   const [form, setForm] = useState<EmployeeFormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [importText, setImportText] = useState('');
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState<CsvImportSummary | null>(null);
@@ -98,21 +99,29 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
   function resetForm() {
     setForm(EMPTY_FORM);
     setEditingId(null);
+    setFormError(null);
   }
 
   async function handleSubmitEmployee(e: React.FormEvent) {
     e.preventDefault();
     const parsedSalary = Number.parseFloat(form.salary);
+    const trimmedEmail = form.email.trim();
+    setFormError(null);
+
     if (!form.id.trim() && !editingId) {
-      showToast('Employee ID is required');
+      setFormError('Employee ID is required for new records.');
       return;
     }
     if (!form.name.trim()) {
-      showToast('Employee name is required');
+      setFormError('Employee name is required.');
+      return;
+    }
+    if (trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      setFormError('Email must be in a valid format (example: name@company.com).');
       return;
     }
     if (Number.isNaN(parsedSalary) || parsedSalary < 0) {
-      showToast('Salary must be a non-negative number');
+      setFormError('Salary must be a non-negative number.');
       return;
     }
 
@@ -121,7 +130,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
       if (editingId) {
         const updated = await updateEmployee(editingId, {
           name: form.name,
-          email: form.email || undefined,
+          email: trimmedEmail || undefined,
           department: form.department || undefined,
           title: form.title || undefined,
           positionType: form.positionType || undefined,
@@ -137,7 +146,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
         const created = await createEmployee({
           id: form.id,
           name: form.name,
-          email: form.email || undefined,
+          email: trimmedEmail || undefined,
           department: form.department || undefined,
           title: form.title || undefined,
           positionType: form.positionType || undefined,
@@ -238,6 +247,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                 <div className="form-group"><label className="form-label">Salary</label><input className="form-input" type="number" min="0" step="0.01" value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))} /></div>
                 <div className="form-group"><label className="form-label">Hire Date</label><input className="form-input" type="date" value={form.hireDate} onChange={(e) => setForm((f) => ({ ...f, hireDate: e.target.value }))} /></div>
               </div>
+              {formError && <div className="alert alert-red" style={{ marginBottom: 12 }}><div className="alert-icon">✕</div><div>{formError}</div></div>}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Save Employee' : 'Add Employee'}</button>
                 {editingId && <button className="btn btn-secondary" type="button" onClick={resetForm}>Cancel Edit</button>}
@@ -254,7 +264,12 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
             <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={handleImportCsv} disabled={importing}>{importing ? 'Importing…' : 'Import CSV to PostgreSQL'}</button></div>
             {importSummary && (
               <div style={{ marginTop: 10, fontSize: 13 }}>
-                Processed {importSummary.rowsProcessed} • Inserted {importSummary.inserted} • Updated {importSummary.updated} • Rejected {importSummary.rejected}
+                <div>Processed {importSummary.rowsProcessed} • Inserted {importSummary.inserted} • Updated {importSummary.updated} • Rejected {importSummary.rejected}</div>
+                {importSummary.validationErrors.length > 0 && (
+                  <div style={{ marginTop: 6, color: 'var(--red-600)' }}>
+                    First errors: {importSummary.validationErrors.slice(0, 3).map((e) => `row ${e.row}: ${e.error}`).join(' | ')}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -291,6 +306,9 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                   </tr>
                 </thead>
                 <tbody>
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={readOnly ? 7 : 8} className="text-muted" style={{ textAlign: 'center', padding: 20 }}>No employees match the current filters.</td></tr>
+                  )}
                   {filtered.map((e) => (
                     <tr key={e.id}>
                       <td>
@@ -306,7 +324,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                       <td>{e.manager ?? '—'}</td>
                       <td>{fmtDate(e.hireDate)}</td>
                       {!readOnly && <td>
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        {formError && <div className="alert alert-red" style={{ marginBottom: 12 }}><div className="alert-icon">✕</div><div>{formError}</div></div>}
+              <div style={{ display: 'flex', gap: 8 }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => { setEditingId(e.id); setForm(employeeToForm(e)); }}>Edit</button>
                           <button className="btn btn-danger btn-sm" onClick={() => { void handleDelete(e.id); }}>Delete</button>
                         </div>
