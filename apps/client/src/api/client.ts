@@ -3,7 +3,8 @@ import type {
   Cycle,
   Employee,
   Recommendation,
-  RecommendationMap
+  RecommendationMap,
+  PayRange
 } from '../types.js';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
@@ -18,6 +19,14 @@ type ApiResponse<T> = {
 
 export type CsvImportSummary = {
   rowsProcessed: number;
+  inserted: number;
+  updated: number;
+  rejected: number;
+  validationErrors: Array<{ row: number; error: string }>;
+};
+
+export type PayRangeImportSummary = {
+  processed: number;
   inserted: number;
   updated: number;
   rejected: number;
@@ -234,6 +243,49 @@ export async function importEmployeesCsv(payload: {
     res,
     `Failed to import employees CSV: ${res.status}`
   );
+}
+
+
+export async function fetchPayRanges(includeInactive = true): Promise<PayRange[]> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges?includeInactive=${includeInactive ? 'true' : 'false'}`);
+  return readApiData<PayRange[]>(res, `Failed to load pay ranges: ${res.status}`);
+}
+
+export async function createPayRange(payload: PayRange): Promise<PayRange> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return readApiData<PayRange>(res, `Failed to create pay range: ${res.status}`);
+}
+
+export async function updatePayRange(id: number, payload: PayRange): Promise<PayRange> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return readApiData<PayRange>(res, `Failed to update pay range: ${res.status}`);
+}
+
+export async function deactivatePayRange(id: number): Promise<void> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges/${id}`, { method: 'DELETE' });
+  await readApiData(res, `Failed to deactivate pay range: ${res.status}`);
+}
+
+export async function importPayRangesCsv(payload: { csvContent: string }): Promise<PayRangeImportSummary> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges/import-csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return readApiData<PayRangeImportSummary>(res, `Failed to import pay ranges CSV: ${res.status}`);
 }
 
 export async function fetchCycle(): Promise<Cycle> {
