@@ -78,10 +78,18 @@ API_BASE_URL=http://localhost:4000 PORT=3000 npm run dev --workspace=web
 
 Bootstrap migration scripts are in `infra/postgres/migrations` and auto-run on first DB init in Docker.
 
-To apply all migrations manually against a running local DB:
+For local operators, migrations run through a Node runner (`scripts/migrate.mjs`) and do **not** require a local `psql` install.
+
+Apply migrations against a DB running on localhost:
 
 ```bash
 npm run db:migrate
+```
+
+Apply migrations through Docker (useful when you do not want Node/DB tooling on host):
+
+```bash
+npm run db:migrate:docker
 ```
 
 ## Workspace checks

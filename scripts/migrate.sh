@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DB_URL="${DATABASE_URL:-postgresql://app_user:app_password@localhost:5432/app_db}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-for f in infra/postgres/migrations/*.sql; do
-  echo "Applying ${f}"
-  psql "${DB_URL}" -v ON_ERROR_STOP=1 -f "${f}"
-done
+echo "Running migrations with Node runner (no local psql required)..."
+node "${SCRIPT_DIR}/migrate.mjs"

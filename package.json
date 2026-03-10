@@ -16,8 +16,10 @@
     "dev:api": "npm run dev --workspace=api",
     "dev:client": "npm run dev --workspace=client",
     "dev:postgres": "docker compose up -d postgres",
-    "db:migrate": "node scripts/migrate.mjs",
-    "dev:fullstack": "npm run dev:postgres && npm run db:migrate && (npm run dev:api & npm run dev:client)"
+    "db:migrate": "npm run db:migrate:local",
+    "dev:fullstack": "npm run dev:postgres && npm run db:migrate && (npm run dev:api & npm run dev:client)",
+    "db:migrate:docker": "docker compose run --rm -e DATABASE_URL=postgresql://app_user:app_password@postgres:5432/app_db api npm run db:migrate",
+    "db:migrate:local": "node scripts/migrate.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.12.0",

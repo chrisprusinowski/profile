@@ -36,10 +36,16 @@ VITE_API_URL=http://localhost:4000
 npm run dev:postgres
 ```
 
-## 4) Run migrations
+## 4) Run migrations (no local `psql` needed)
 
 ```bash
 npm run db:migrate
+```
+
+If you prefer running migrations from Docker instead of your local Node environment:
+
+```bash
+npm run db:migrate:docker
 ```
 
 ## 5) Start API
@@ -139,7 +145,8 @@ The client includes a **Local Demo Mode** user switcher in the sidebar so you ca
 ## Local review workflow (v2)
 
 1. Run migrations to include workflow and audit tables:
-   - `./scripts/migrate.sh`
+   - `npm run db:migrate`
+   - or `npm run db:migrate:docker`
 2. Start API and client.
 3. As **admin**:
    - Import employees (`Employees` page CSV import)
