@@ -73,7 +73,9 @@ export default function App() {
     void refreshAll();
   }, [refreshAll]);
 
-  const flaggedCount = 0;
+  const flaggedCount = cycle
+    ? employees.filter((e) => (recommendations[e.id]?.meritPct ?? 0) > cycle.guidelineMax).length
+    : 0;
 
   if (loading) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Loading…</div>;
@@ -86,6 +88,18 @@ export default function App() {
           <div className="card-header"><div className="card-title">Unable to load app data</div></div>
           <div className="card-body">
             <p style={{ marginTop: 0 }}>{loadError ?? 'Unknown error'}</p>
+            {import.meta.env.VITE_API_URL ? (
+              <p style={{ marginBottom: 0, color: 'var(--gray-500)', fontSize: 13 }}>
+                Confirm API is running at <code>{import.meta.env.VITE_API_URL as string}</code> and migrations are applied.
+              </p>
+            ) : (
+              <p style={{ marginBottom: 0, color: 'var(--gray-500)', fontSize: 13 }}>
+                Missing <code>VITE_API_URL</code> in <code>apps/client/.env.local</code>.
+              </p>
+            )}
+            <div style={{ marginTop: 12 }}>
+              <button className="btn btn-primary" onClick={() => void refreshAll()}>Retry</button>
+            </div>
           </div>
         </div>
       </div>

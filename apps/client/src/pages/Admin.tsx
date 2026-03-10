@@ -52,6 +52,7 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
   const [editingRangeId, setEditingRangeId] = useState<number | null>(null);
   const [importText, setImportText] = useState('');
   const [importSummary, setImportSummary] = useState<PayRangeImportSummary | null>(null);
+  const [userError, setUserError] = useState<string | null>(null);
 
   async function loadPayRanges() {
     const rows = await fetchPayRanges(true);
@@ -85,8 +86,24 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
   }
 
   async function handleCreateUser() {
+    const email = newEmail.trim().toLowerCase();
+    setUserError(null);
+
+    if (!email) {
+      setUserError('Email is required.');
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setUserError('Enter a valid email address.');
+      return;
+    }
+    if (newRole === 'manager' && !newManagerName.trim() && !newManagerEmail.trim()) {
+      setUserError('Manager users need either Manager Scope Name or Manager Scope Email.');
+      return;
+    }
+
     try {
-      await createAppUser({ email: newEmail, role: newRole, managerName: newRole === 'manager' ? newManagerName : '', managerEmail: newRole === 'manager' ? newManagerEmail : '' });
+      await createAppUser({ email, role: newRole, managerName: newRole === 'manager' ? newManagerName.trim() : '', managerEmail: newRole === 'manager' ? newManagerEmail.trim() : '' });
       showToast('App user created');
       setNewEmail('');
       setNewRole('manager');
@@ -109,6 +126,22 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
   }
 
   async function handleSaveRange() {
+    if (!rangeForm.positionType?.trim() && !rangeForm.jobFamily?.trim()) {
+      showToast('Pay range needs Position Type or Job Family');
+      return;
+    }
+    if (!rangeForm.geography?.trim()) {
+      showToast('Pay range geography is required');
+      return;
+    }
+    if (rangeForm.salaryMin < 0 || rangeForm.salaryMid < 0 || rangeForm.salaryMax < 0) {
+      showToast('Pay range salary values cannot be negative');
+      return;
+    }
+    if (!(rangeForm.salaryMin <= rangeForm.salaryMid && rangeForm.salaryMid <= rangeForm.salaryMax)) {
+      showToast('Pay range must satisfy Min ≤ Mid ≤ Max');
+      return;
+    }
     try {
       if (editingRangeId) {
         await updatePayRange(editingRangeId, rangeForm);
@@ -182,7 +215,7 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
             <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>CSV required fields: position_type, geography, salary_min, salary_mid, salary_max. Optional: job_family, title/job_title_reference, level, geo_tier, currency, effective_date, range_name.</p>
             <textarea className="form-input" rows={5} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="position_type,geography,salary_min,salary_mid,salary_max" />
             <div style={{ marginTop: 10 }}><button className="btn btn-secondary" type="button" onClick={() => void handleImportRanges()}>Import Pay Range CSV</button></div>
-            {importSummary && <div style={{ marginTop: 10, fontSize: 13 }}>Processed {importSummary.processed} • Inserted {importSummary.inserted} • Updated {importSummary.updated} • Rejected {importSummary.rejected}</div>}
+            {importSummary && <div style={{ marginTop: 10, fontSize: 13 }}><div>Processed {importSummary.processed} • Inserted {importSummary.inserted} • Updated {importSummary.updated} • Rejected {importSummary.rejected}</div>{importSummary.validationErrors.length > 0 && <div style={{ marginTop: 6, color: 'var(--red-600)' }}>First errors: {importSummary.validationErrors.slice(0, 3).map((e) => `row ${e.row}: ${e.error}`).join(' | ')}</div>}</div>}
             <div className="divider" />
             <div className="form-row">
               <div className="form-group"><label className="form-label">Position Type</label><input className="form-input" value={rangeForm.positionType ?? ''} onChange={(e) => setRangeForm((r) => ({ ...r, positionType: e.target.value }))} /></div>
@@ -202,6 +235,9 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
             <table className="data-table">
               <thead><tr><th>Position Type</th><th>Geography</th><th>Level</th><th className="numeric">Min</th><th className="numeric">Mid</th><th className="numeric">Max</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
+                {payRanges.length === 0 && (
+                  <tr><td colSpan={8} className="text-muted" style={{ textAlign: 'center', padding: 20 }}>No pay ranges loaded yet.</td></tr>
+                )}
                 {payRanges.map((row) => (
                   <tr key={row.id}>
                     <td>{row.positionType || row.jobFamily || '—'}</td>
@@ -225,8 +261,8 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
         <div className="card mb-20">
           <div className="card-header"><div className="card-title">Exports</div></div>
           <div className="card-body">
-            <button className="btn btn-secondary" type="button" onClick={async () => { const text = await downloadExport('employees.csv'); const blob = new Blob([text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'employees.csv'; a.click(); showToast('Employee export downloaded'); }}>Export Employees CSV</button>
-            <button className="btn btn-secondary" style={{ marginLeft: 8 }} type="button" onClick={async () => { const text = await downloadExport('recommendations.csv'); const blob = new Blob([text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'recommendations.csv'; a.click(); showToast('Recommendations export downloaded'); }}>Export Recommendations CSV</button>
+            <button className="btn btn-secondary" type="button" onClick={async () => { try { const text = await downloadExport('employees.csv'); const blob = new Blob([text], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'employees.csv'; a.click(); URL.revokeObjectURL(url); showToast('Employee export downloaded'); } catch (err) { showToast(err instanceof Error ? err.message : 'Employee export failed'); } }}>Export Employees CSV</button>
+            <button className="btn btn-secondary" style={{ marginLeft: 8 }} type="button" onClick={async () => { try { const text = await downloadExport('recommendations.csv'); const blob = new Blob([text], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'recommendations.csv'; a.click(); URL.revokeObjectURL(url); showToast('Recommendations export downloaded'); } catch (err) { showToast(err instanceof Error ? err.message : 'Recommendations export failed'); } }}>Export Recommendations CSV</button>
           </div>
         </div>
         <div className="card">
@@ -238,12 +274,16 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
               <div className="form-group"><label className="form-label">Role</label><select className="form-select" value={newRole} onChange={(e) => setNewRole(e.target.value as AppRole)}><option value="admin">admin</option><option value="executive">executive</option><option value="manager">manager</option></select></div>
               {newRole === 'manager' && <><div className="form-group"><label className="form-label">Manager Scope Name</label><input className="form-input" value={newManagerName} onChange={(e) => setNewManagerName(e.target.value)} placeholder="Jamie Rivera" /></div><div className="form-group"><label className="form-label">Manager Scope Email (preferred)</label><input className="form-input" value={newManagerEmail} onChange={(e) => setNewManagerEmail(e.target.value)} placeholder="manager1@demo.com" /></div></>}
             </div>
+            {userError && <div className="alert alert-red" style={{ marginBottom: 12 }}><div className="alert-icon">✕</div><div>{userError}</div></div>}
             <button className="btn btn-secondary" onClick={handleCreateUser} type="button">Add App User</button>
           </div>
           <div className="card-body" style={{ paddingTop: 0 }}>
             <table className="data-table">
               <thead><tr><th>Email</th><th>Role</th><th>Manager Scope</th><th>Manager Email</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
+                {demoUsers.length === 0 && (
+                  <tr><td colSpan={6} className="text-muted" style={{ textAlign: 'center', padding: 20 }}>No demo users found.</td></tr>
+                )}
                 {demoUsers.map((user) => (
                   <tr key={user.email}>
                     <td>{user.email}</td>
