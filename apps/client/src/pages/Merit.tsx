@@ -247,6 +247,8 @@ export function Merit({
               <tr>
                 <th>Employee</th>
                 <th className="numeric">Salary</th>
+                <th>Pay Band</th>
+                <th className="numeric">Compa</th>
                 <th className="numeric">Merit %</th>
                 <th className="numeric">Bonus %</th>
                 <th className="numeric">Bonus $</th>
@@ -260,6 +262,10 @@ export function Merit({
                 const meritPct = rec?.meritPct ?? 0;
                 const status = rec?.status ?? 'Draft';
                 const locked = readOnly || status === 'Approved';
+
+                const pay = e.payRange;
+                const payBandLabel = pay?.bandStatus === 'below_range' ? 'Below range' : pay?.bandStatus === 'above_range' ? 'Above range' : pay?.bandStatus === 'in_range' ? 'In range' : 'No range matched';
+
                 return (
                   <tr key={e.id}>
                     <td>
@@ -279,6 +285,17 @@ export function Merit({
                       </div>
                     </td>
                     <td className="numeric">{fmt(e.salary)}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {pay?.matchedRangeMin != null && pay?.matchedRangeMax != null ? (
+                        <div>
+                          <div>{fmt(pay.matchedRangeMin)} - {fmt(pay.matchedRangeMax)}</div>
+                          <div className="employee-title">{payBandLabel}</div>
+                        </div>
+                      ) : (
+                        <span className="text-muted">No range matched</span>
+                      )}
+                    </td>
+                    <td className="numeric">{pay?.compaRatio != null ? `${(pay.compaRatio * 100).toFixed(1)}%` : '—'}</td>
                     <td>
                       <input
                         className="merit-pct-input"

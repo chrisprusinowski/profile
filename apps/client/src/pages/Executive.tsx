@@ -49,6 +49,21 @@ export function Executive({ employees, cycle, recommendations }: Props) {
   const submitted =
     statusCounts.Submitted + statusCounts.Approved + statusCounts.Flagged;
 
+  const belowRange = employees.filter((e) => e.payRange?.bandStatus === 'below_range').length;
+  const aboveRange = employees.filter((e) => e.payRange?.bandStatus === 'above_range').length;
+  const noRange = employees.filter((e) => !e.payRange || e.payRange.bandStatus === 'no_range').length;
+
+  const compaByDept: Record<string, { total: number; count: number }> = {};
+  for (const e of employees) {
+    const ratio = e.payRange?.compaRatio;
+    if (ratio == null) continue;
+    const key = e.department ?? 'Unassigned';
+    compaByDept[key] = compaByDept[key] ?? { total: 0, count: 0 };
+    compaByDept[key].total += ratio;
+    compaByDept[key].count += 1;
+  }
+  const avgCompaByDept = Object.entries(compaByDept).map(([dept, v]) => ({ dept, avg: v.total / v.count })).sort((a, b) => b.avg - a.avg);
+
   // ── Department rollup ──────────────────────────────────────
   const deptMap: Record<
     string,
@@ -182,6 +197,24 @@ export function Executive({ employees, cycle, recommendations }: Props) {
               {employees.length - submitted} still pending
             </div>
           </div>
+          <div className="metric-card">
+            <div className="metric-icon amber">↓</div>
+            <div className="metric-label">Below Range</div>
+            <div className="metric-value">{belowRange}</div>
+            <div className="metric-sub">Employees below pay band</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-icon red">↑</div>
+            <div className="metric-label">Above Range</div>
+            <div className="metric-value">{aboveRange}</div>
+            <div className="metric-sub">Employees above pay band</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-icon blue">∅</div>
+            <div className="metric-label">No Match</div>
+            <div className="metric-value">{noRange}</div>
+            <div className="metric-sub">Employees without range mapping</div>
+          </div>
         </div>
 
         <div className="card" style={{ marginBottom: 20 }}>
@@ -201,6 +234,24 @@ export function Executive({ employees, cycle, recommendations }: Props) {
                 {label}: {count}
               </span>
             ))}
+          </div>
+        </div>
+
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header"><div className="card-title">Average Compa-Ratio by Department</div></div>
+          <div className="card-body" style={{ paddingTop: 8 }}>
+            {avgCompaByDept.length === 0 ? (
+              <div className="text-muted">No matched pay ranges yet.</div>
+            ) : (
+              <table className="data-table">
+                <thead><tr><th>Department</th><th className="numeric">Avg Compa-Ratio</th></tr></thead>
+                <tbody>
+                  {avgCompaByDept.map((row) => (
+                    <tr key={row.dept}><td>{row.dept}</td><td className="numeric">{(row.avg * 100).toFixed(1)}%</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 

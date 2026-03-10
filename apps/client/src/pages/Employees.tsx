@@ -24,6 +24,9 @@ interface EmployeeFormState {
   email: string;
   department: string;
   title: string;
+  positionType: string;
+  geography: string;
+  level: string;
   salary: string;
   manager: string;
   hireDate: string;
@@ -35,6 +38,9 @@ const EMPTY_FORM: EmployeeFormState = {
   email: '',
   department: '',
   title: '',
+  positionType: '',
+  geography: '',
+  level: '',
   salary: '0',
   manager: '',
   hireDate: '',
@@ -47,6 +53,9 @@ function employeeToForm(employee: Employee): EmployeeFormState {
     email: employee.email ?? '',
     department: employee.department ?? '',
     title: employee.title ?? '',
+    positionType: employee.positionType ?? '',
+    geography: employee.geography ?? '',
+    level: employee.level ?? '',
     salary: String(employee.salary ?? 0),
     manager: employee.manager ?? '',
     hireDate: employee.hireDate ?? '',
@@ -78,7 +87,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     return rows.filter((e) => {
       if (deptFilter && e.department !== deptFilter) return false;
       if (!q) return true;
-      return [e.name, e.department, e.title, e.manager, e.email]
+      return [e.name, e.department, e.title, e.positionType, e.geography, e.level, e.manager, e.email]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -115,6 +124,9 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           email: form.email || undefined,
           department: form.department || undefined,
           title: form.title || undefined,
+          positionType: form.positionType || undefined,
+          geography: form.geography || undefined,
+          level: form.level || undefined,
           salary: parsedSalary,
           manager: form.manager || undefined,
           hireDate: form.hireDate || undefined,
@@ -128,6 +140,9 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           email: form.email || undefined,
           department: form.department || undefined,
           title: form.title || undefined,
+          positionType: form.positionType || undefined,
+          geography: form.geography || undefined,
+          level: form.level || undefined,
           salary: parsedSalary,
           manager: form.manager || undefined,
           hireDate: form.hireDate || undefined,
@@ -210,6 +225,13 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
               </div>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Title</label><input className="form-input" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} /></div>
+                <div className="form-group"><label className="form-label">Position Type</label><input className="form-input" value={form.positionType} onChange={(e) => setForm((f) => ({ ...f, positionType: e.target.value }))} /></div>
+              </div>
+              <div className="form-row">
+                <div className="form-group"><label className="form-label">Geography</label><input className="form-input" value={form.geography} onChange={(e) => setForm((f) => ({ ...f, geography: e.target.value }))} /></div>
+                <div className="form-group"><label className="form-label">Level</label><input className="form-input" value={form.level} onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))} /></div>
+              </div>
+              <div className="form-row">
                 <div className="form-group"><label className="form-label">Manager</label><input className="form-input" value={form.manager} onChange={(e) => setForm((f) => ({ ...f, manager: e.target.value }))} /></div>
               </div>
               <div className="form-row">
@@ -227,8 +249,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
         {!readOnly && <div className="card mb-20">
           <div className="card-header"><div className="card-title">Import Employees from CSV</div></div>
           <div className="card-body">
-            <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>Paste CSV (required columns: id, name, email, department, title, salary, manager, hire_date).</p>
-            <textarea className="form-input" rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="id,name,email,department,title,salary,manager,hire_date" />
+            <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>Paste CSV (required columns: id, name, email, department, title, salary, manager, hire_date). Optional: position_type, geography, level.</p>
+            <textarea className="form-input" rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="id,name,email,department,title,position_type,geography,level,salary,manager,hire_date" />
             <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={handleImportCsv} disabled={importing}>{importing ? 'Importing…' : 'Import CSV to PostgreSQL'}</button></div>
             {importSummary && (
               <div style={{ marginTop: 10, fontSize: 13 }}>
@@ -265,7 +287,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Name</th><th>Department</th><th>Title</th><th className="numeric">Salary</th><th>Manager</th><th>Hire Date</th>{!readOnly && <th>Actions</th>}
+                    <th>Name</th><th>Department</th><th>Title</th><th>Position/Geo</th><th className="numeric">Salary</th><th>Manager</th><th>Hire Date</th>{!readOnly && <th>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -279,6 +301,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                       </td>
                       <td>{e.department ? <span className="chip">{e.department}</span> : '—'}</td>
                       <td>{e.title ?? '—'}</td>
+                      <td>{e.positionType ?? '—'} / {e.geography ?? '—'}</td>
                       <td className="numeric">{fmt(e.salary)}</td>
                       <td>{e.manager ?? '—'}</td>
                       <td>{fmtDate(e.hireDate)}</td>

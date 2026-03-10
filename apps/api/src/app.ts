@@ -4,6 +4,7 @@ import { employeesRouter } from './routes/employees.js';
 import { cycleRouter } from './routes/cycle.js';
 import { recommendationsRouter } from './routes/recommendations.js';
 import { usersRouter } from './routes/users.js';
+import { payRangesRouter } from './routes/payRanges.js';
 import { authMiddleware } from './auth.js';
 
 export const createApp = () => {
@@ -26,7 +27,7 @@ export const createApp = () => {
     try {
       const dbConnected = await checkDatabaseHealth();
       return res.status(200).json({ status: 'ok', dbConnected });
-    } catch (error) {
+    } catch {
       return res.status(503).json({
         status: 'error',
         message: 'Database connection failed',
@@ -40,6 +41,7 @@ export const createApp = () => {
   app.use('/api/v1/employees', employeesRouter);
   app.use('/api/v1/cycle', cycleRouter);
   app.use('/api/v1/recommendations', recommendationsRouter);
+  app.use('/api/v1/pay-ranges', payRangesRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });

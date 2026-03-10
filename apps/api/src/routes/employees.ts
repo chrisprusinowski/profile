@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises';
 import { z } from 'zod';
 import { getManagerScopeName, requireRole, type AuthenticatedRequest } from '../auth.js';
 import { pool } from '../db.js';
+import { findBestPayRange, type PayRangeRecord } from '../payRanges.js';
 
 export const employeesRouter = Router();
 
@@ -12,6 +13,9 @@ const employeeSchema = z.object({
   email: z.string().trim().email('email must be valid').max(255).optional().or(z.literal('')),
   department: z.string().trim().max(255).optional().or(z.literal('')),
   title: z.string().trim().max(255).optional().or(z.literal('')),
+  positionType: z.string().trim().max(255).optional().or(z.literal('')),
+  geography: z.string().trim().max(255).optional().or(z.literal('')),
+  level: z.string().trim().max(64).optional().or(z.literal('')),
   salary: z.coerce.number().finite().min(0, 'salary must be >= 0'),
   manager: z.string().trim().max(255).optional().or(z.literal('')),
   hireDate: z.string().trim().optional().or(z.literal('')),
@@ -58,6 +62,28 @@ function parseDateInput(value: string | undefined): string | null {
   return date.toISOString().slice(0, 10);
 }
 
+async function loadPayRanges(): Promise<PayRangeRecord[]> {
+  const result = await pool.query(
+    `SELECT id,
+            range_name AS "rangeName",
+            job_family AS "jobFamily",
+            position_type AS "positionType",
+            job_title_reference AS "jobTitleReference",
+            level,
+            geography,
+            geo_tier AS "geoTier",
+            currency,
+            salary_min::float AS "salaryMin",
+            salary_mid::float AS "salaryMid",
+            salary_max::float AS "salaryMax",
+            to_char(effective_date, 'YYYY-MM-DD') AS "effectiveDate",
+            is_active AS "isActive"
+     FROM pay_ranges
+     WHERE is_active = true`
+  );
+  return result.rows;
+}
+
 async function fetchEmployeesFromDb(managerScopeName: string | null) {
   const result = managerScopeName
     ? await pool.query(
@@ -66,6 +92,9 @@ async function fetchEmployeesFromDb(managerScopeName: string | null) {
               email,
               department,
               title,
+              position_type AS "positionType",
+              geography,
+              level,
               salary::float AS salary,
               manager,
               to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
@@ -80,6 +109,9 @@ async function fetchEmployeesFromDb(managerScopeName: string | null) {
               email,
               department,
               title,
+              position_type AS "positionType",
+              geography,
+              level,
               salary::float AS salary,
               manager,
               to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
@@ -87,7 +119,11 @@ async function fetchEmployeesFromDb(managerScopeName: string | null) {
        ORDER BY name ASC, id ASC`,
     );
 
-  return result.rows;
+  const ranges = await loadPayRanges();
+  return result.rows.map((employee) => ({
+    ...employee,
+    payRange: findBestPayRange(employee, ranges)
+  }));
 }
 
 employeesRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
@@ -117,20 +153,24 @@ employeesRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO employees (id, name, email, department, title, salary, manager, hire_date)
-       VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), $8)
+      `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, hire_date)
+       VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), $11)
        RETURNING id,
                  name,
                  email,
                  department,
                  title,
+                 position_type AS "positionType",
+                 geography,
+                 level,
                  salary::float AS salary,
                  manager,
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
-      [employee.id, employee.name, employee.email ?? '', employee.department ?? '', employee.title ?? '', employee.salary, employee.manager ?? '', hireDate],
+      [employee.id, employee.name, employee.email ?? '', employee.department ?? '', employee.title ?? '', employee.positionType ?? '', employee.geography ?? '', employee.level ?? '', employee.salary, employee.manager ?? '', hireDate],
     );
 
-    res.status(201).json({ success: true, data: result.rows[0] });
+    const ranges = await loadPayRanges();
+    res.status(201).json({ success: true, data: { ...result.rows[0], payRange: findBestPayRange(result.rows[0], ranges) } });
   } catch (error) {
     if ((error as { code?: string }).code === '23505') {
       res.status(409).json({ success: false, error: 'Employee with this id already exists' });
@@ -161,28 +201,35 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
            email = NULLIF($2, ''),
            department = NULLIF($3, ''),
            title = NULLIF($4, ''),
-           salary = $5,
-           manager = NULLIF($6, ''),
-           hire_date = $7,
+           position_type = NULLIF($5, ''),
+           geography = NULLIF($6, ''),
+           level = NULLIF($7, ''),
+           salary = $8,
+           manager = NULLIF($9, ''),
+           hire_date = $10,
            updated_at = NOW()
-       WHERE id = $8
+       WHERE id = $11
        RETURNING id,
                  name,
                  email,
                  department,
                  title,
+                 position_type AS "positionType",
+                 geography,
+                 level,
                  salary::float AS salary,
                  manager,
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
-      [parsed.data.name, parsed.data.email ?? '', parsed.data.department ?? '', parsed.data.title ?? '', parsed.data.salary, parsed.data.manager ?? '', hireDate, req.params.id],
+      [parsed.data.name, parsed.data.email ?? '', parsed.data.department ?? '', parsed.data.title ?? '', parsed.data.positionType ?? '', parsed.data.geography ?? '', parsed.data.level ?? '', parsed.data.salary, parsed.data.manager ?? '', hireDate, req.params.id],
     );
 
-    if (!result.rows[0]) {
+    if (result.rowCount === 0) {
       res.status(404).json({ success: false, error: 'Employee not found' });
       return;
     }
 
-    res.json({ success: true, data: result.rows[0] });
+    const ranges = await loadPayRanges();
+    res.json({ success: true, data: { ...result.rows[0], payRange: findBestPayRange(result.rows[0], ranges) } });
   } catch (error) {
     next(error);
   }
@@ -193,7 +240,7 @@ employeesRouter.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
   try {
     const result = await pool.query('DELETE FROM employees WHERE id = $1 RETURNING id', [req.params.id]);
 
-    if (!result.rows[0]) {
+    if (result.rowCount === 0) {
       res.status(404).json({ success: false, error: 'Employee not found' });
       return;
     }
@@ -207,52 +254,41 @@ employeesRouter.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
 employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next) => {
   if (!requireRole(req, res, ['admin'])) return;
   try {
-    const payload = req.body as { csvContent?: string; filePath?: string };
-    let csvContent = payload.csvContent;
-
-    if (!csvContent && payload.filePath) {
-      csvContent = await readFile(payload.filePath, 'utf8');
-    }
-
-    if (!csvContent || !csvContent.trim()) {
-      res.status(400).json({ success: false, error: 'csvContent is required (or provide filePath)' });
+    let csvContent = '';
+    if (typeof req.body?.csvContent === 'string' && req.body.csvContent.trim()) {
+      csvContent = req.body.csvContent;
+    } else if (typeof req.body?.filePath === 'string' && req.body.filePath.trim()) {
+      csvContent = await readFile(req.body.filePath, 'utf8');
+    } else {
+      res.status(400).json({ success: false, error: 'Provide csvContent or filePath' });
       return;
     }
 
-    const lines = csvContent
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-
+    const lines = csvContent.split(/\r?\n/).filter((line) => line.trim().length > 0);
     if (lines.length < 2) {
-      res.status(400).json({ success: false, error: 'CSV must include a header and at least one row' });
+      res.status(400).json({ success: false, error: 'CSV must include header and at least one data row' });
       return;
     }
 
     const headers = parseCsvLine(lines[0]).map(normalizeHeader);
-    const missingColumns = requiredCsvColumns.filter((col) => !headers.includes(col));
+    const missingColumns = requiredCsvColumns.filter((column) => !headers.includes(column));
 
     if (missingColumns.length > 0) {
-      res.status(400).json({
-        success: false,
-        error: `Missing required CSV columns: ${missingColumns.join(', ')}`,
-      });
+      res.status(400).json({ success: false, error: `Missing required columns: ${missingColumns.join(', ')}` });
       return;
     }
 
-    let rowsProcessed = 0;
     let inserted = 0;
     let updated = 0;
     let rejected = 0;
     const validationErrors: Array<{ row: number; error: string }> = [];
 
-    for (const [index, line] of lines.slice(1).entries()) {
-      const rowNumber = index + 2;
-      rowsProcessed += 1;
-      const values = parseCsvLine(line);
+    for (let rowIndex = 1; rowIndex < lines.length; rowIndex++) {
+      const rowNumber = rowIndex + 1;
+      const values = parseCsvLine(lines[rowIndex]);
       const row: Record<string, string> = {};
-      headers.forEach((header, i) => {
-        row[header] = values[i] ?? '';
+      headers.forEach((header, idx) => {
+        row[header] = values[idx] ?? '';
       });
 
       const validation = employeeSchema.safeParse({
@@ -261,6 +297,9 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
         email: row.email,
         department: row.department,
         title: row.title,
+        positionType: row.position_type,
+        geography: row.geography,
+        level: row.level,
         salary: row.salary,
         manager: row.manager,
         hireDate: row.hire_date,
@@ -275,24 +314,27 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       const hireDate = parseDateInput(validation.data.hireDate);
       if (validation.data.hireDate && !hireDate) {
         rejected += 1;
-        validationErrors.push({ row: rowNumber, error: 'Invalid hire_date value. Expected YYYY-MM-DD' });
+        validationErrors.push({ row: rowNumber, error: 'hire_date must be a valid date (YYYY-MM-DD)' });
         continue;
       }
 
       const upsertResult = await pool.query(
-        `INSERT INTO employees (id, name, email, department, title, salary, manager, hire_date)
-         VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), $6, NULLIF($7, ''), $8)
+        `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, hire_date)
+         VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), $11)
          ON CONFLICT (id)
          DO UPDATE SET name = EXCLUDED.name,
                        email = EXCLUDED.email,
                        department = EXCLUDED.department,
                        title = EXCLUDED.title,
+                       position_type = EXCLUDED.position_type,
+                       geography = EXCLUDED.geography,
+                       level = EXCLUDED.level,
                        salary = EXCLUDED.salary,
                        manager = EXCLUDED.manager,
                        hire_date = EXCLUDED.hire_date,
                        updated_at = NOW()
-         RETURNING (xmax = 0) AS inserted`,
-        [validation.data.id, validation.data.name, validation.data.email ?? '', validation.data.department ?? '', validation.data.title ?? '', validation.data.salary, validation.data.manager ?? '', hireDate],
+         RETURNING xmax = 0 AS inserted`,
+        [validation.data.id, validation.data.name, validation.data.email ?? '', validation.data.department ?? '', validation.data.title ?? '', validation.data.positionType ?? '', validation.data.geography ?? '', validation.data.level ?? '', validation.data.salary, validation.data.manager ?? '', hireDate],
       );
 
       if (upsertResult.rows[0]?.inserted) {
@@ -305,7 +347,7 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
     res.json({
       success: true,
       data: {
-        rowsProcessed,
+        rowsProcessed: lines.length - 1,
         inserted,
         updated,
         rejected,

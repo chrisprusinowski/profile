@@ -1,12 +1,48 @@
+export interface EmployeePayRange {
+  payRangeId: number | null;
+  payRangeName: string | null;
+  matchedRangeMin: number | null;
+  matchedRangeMid: number | null;
+  matchedRangeMax: number | null;
+  matchedRangeCurrency: string | null;
+  bandStatus: 'below_range' | 'in_range' | 'above_range' | 'no_range';
+  compaRatio: number | null;
+  rangePenetration: number | null;
+  matchedBy?: string | null;
+}
+
 export interface Employee {
   id: string;
   name: string;
   email?: string;
   department?: string;
   title?: string;
+  positionType?: string;
+  geography?: string;
+  level?: string;
   salary: number;
   manager?: string;
   hireDate?: string;
+  payRange?: EmployeePayRange;
+}
+
+export interface PayRange {
+  id?: number;
+  rangeName?: string | null;
+  jobFamily?: string | null;
+  positionType?: string | null;
+  jobTitleReference?: string | null;
+  level?: string | null;
+  geography?: string | null;
+  geoTier?: string | null;
+  currency?: string | null;
+  salaryMin: number;
+  salaryMid: number;
+  salaryMax: number;
+  effectiveDate?: string | null;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Recommendation {
