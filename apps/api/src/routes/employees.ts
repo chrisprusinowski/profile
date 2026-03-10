@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getManagerScopeName, requireRole, type AuthenticatedRequest } from '../auth.js';
 import { pool } from '../db.js';
 import { findBestPayRange, type PayRangeRecord } from '../payRanges.js';
+import { logAuditEvent } from '../audit.js';
 
 export const employeesRouter = Router();
 
@@ -18,6 +19,7 @@ const employeeSchema = z.object({
   level: z.string().trim().max(64).optional().or(z.literal('')),
   salary: z.coerce.number().finite().min(0, 'salary must be >= 0'),
   manager: z.string().trim().max(255).optional().or(z.literal('')),
+  managerEmail: z.string().trim().email().optional().or(z.literal('')),
   hireDate: z.string().trim().optional().or(z.literal('')),
 });
 
@@ -84,7 +86,7 @@ async function loadPayRanges(): Promise<PayRangeRecord[]> {
   return result.rows;
 }
 
-async function fetchEmployeesFromDb(managerScopeName: string | null) {
+async function fetchEmployeesFromDb(managerScopeName: string | null, managerScopeEmail: string | null) {
   const result = managerScopeName
     ? await pool.query(
       `SELECT id,
@@ -97,11 +99,12 @@ async function fetchEmployeesFromDb(managerScopeName: string | null) {
               level,
               salary::float AS salary,
               manager,
+              manager_email AS "managerEmail",
               to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
        FROM employees
-       WHERE lower(manager) = lower($1)
+       WHERE lower(manager) = lower($1) OR lower(manager_email) = lower($2)
        ORDER BY name ASC, id ASC`,
-      [managerScopeName],
+      [managerScopeName, managerScopeEmail],
     )
     : await pool.query(
       `SELECT id,
@@ -114,6 +117,7 @@ async function fetchEmployeesFromDb(managerScopeName: string | null) {
               level,
               salary::float AS salary,
               manager,
+              manager_email AS "managerEmail",
               to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
        FROM employees
        ORDER BY name ASC, id ASC`,
@@ -129,7 +133,8 @@ async function fetchEmployeesFromDb(managerScopeName: string | null) {
 employeesRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const managerScopeName = getManagerScopeName(req.user!);
-    const employees = await fetchEmployeesFromDb(managerScopeName);
+    const managerScopeEmail = req.user?.email?.toLowerCase() ?? null;
+    const employees = await fetchEmployeesFromDb(managerScopeName, managerScopeEmail);
     res.json({ success: true, data: employees });
   } catch (error) {
     next(error);
@@ -153,8 +158,8 @@ employeesRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, hire_date)
-       VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), $11)
+      `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, hire_date)
+       VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), $12)
        RETURNING id,
                  name,
                  email,
@@ -166,10 +171,11 @@ employeesRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
                  salary::float AS salary,
                  manager,
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
-      [employee.id, employee.name, employee.email ?? '', employee.department ?? '', employee.title ?? '', employee.positionType ?? '', employee.geography ?? '', employee.level ?? '', employee.salary, employee.manager ?? '', hireDate],
+      [employee.id, employee.name, employee.email ?? '', employee.department ?? '', employee.title ?? '', employee.positionType ?? '', employee.geography ?? '', employee.level ?? '', employee.salary, employee.manager ?? '', employee.managerEmail ?? '', hireDate],
     );
 
     const ranges = await loadPayRanges();
+    await logAuditEvent({ actionType: 'employee.created', actorEmail: req.user!.email, targetEntity: 'employees', targetId: result.rows[0].id, newValues: result.rows[0] });
     res.status(201).json({ success: true, data: { ...result.rows[0], payRange: findBestPayRange(result.rows[0], ranges) } });
   } catch (error) {
     if ((error as { code?: string }).code === '23505') {
@@ -206,9 +212,10 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
            level = NULLIF($7, ''),
            salary = $8,
            manager = NULLIF($9, ''),
-           hire_date = $10,
+           manager_email = NULLIF(lower($10), ''),
+           hire_date = $11,
            updated_at = NOW()
-       WHERE id = $11
+       WHERE id = $12
        RETURNING id,
                  name,
                  email,
@@ -220,7 +227,7 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
                  salary::float AS salary,
                  manager,
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
-      [parsed.data.name, parsed.data.email ?? '', parsed.data.department ?? '', parsed.data.title ?? '', parsed.data.positionType ?? '', parsed.data.geography ?? '', parsed.data.level ?? '', parsed.data.salary, parsed.data.manager ?? '', hireDate, req.params.id],
+      [parsed.data.name, parsed.data.email ?? '', parsed.data.department ?? '', parsed.data.title ?? '', parsed.data.positionType ?? '', parsed.data.geography ?? '', parsed.data.level ?? '', parsed.data.salary, parsed.data.manager ?? '', parsed.data.managerEmail ?? '', hireDate, req.params.id],
     );
 
     if (result.rowCount === 0) {
@@ -229,6 +236,7 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
     }
 
     const ranges = await loadPayRanges();
+    await logAuditEvent({ actionType: 'employee.updated', actorEmail: req.user!.email, targetEntity: 'employees', targetId: String(req.params.id), newValues: result.rows[0] });
     res.json({ success: true, data: { ...result.rows[0], payRange: findBestPayRange(result.rows[0], ranges) } });
   } catch (error) {
     next(error);
@@ -245,6 +253,7 @@ employeesRouter.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
       return;
     }
 
+    await logAuditEvent({ actionType: 'employee.deleted', actorEmail: req.user!.email, targetEntity: 'employees', targetId: result.rows[0].id });
     res.json({ success: true, data: { id: result.rows[0].id } });
   } catch (error) {
     next(error);
@@ -302,6 +311,7 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
         level: row.level,
         salary: row.salary,
         manager: row.manager,
+        managerEmail: row.manager_email,
         hireDate: row.hire_date,
       });
 
@@ -319,8 +329,8 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       }
 
       const upsertResult = await pool.query(
-        `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, hire_date)
-         VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), $11)
+        `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, hire_date)
+         VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), $12)
          ON CONFLICT (id)
          DO UPDATE SET name = EXCLUDED.name,
                        email = EXCLUDED.email,
@@ -331,10 +341,11 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
                        level = EXCLUDED.level,
                        salary = EXCLUDED.salary,
                        manager = EXCLUDED.manager,
+                       manager_email = EXCLUDED.manager_email,
                        hire_date = EXCLUDED.hire_date,
                        updated_at = NOW()
          RETURNING xmax = 0 AS inserted`,
-        [validation.data.id, validation.data.name, validation.data.email ?? '', validation.data.department ?? '', validation.data.title ?? '', validation.data.positionType ?? '', validation.data.geography ?? '', validation.data.level ?? '', validation.data.salary, validation.data.manager ?? '', hireDate],
+        [validation.data.id, validation.data.name, validation.data.email ?? '', validation.data.department ?? '', validation.data.title ?? '', validation.data.positionType ?? '', validation.data.geography ?? '', validation.data.level ?? '', validation.data.salary, validation.data.manager ?? '', validation.data.managerEmail ?? '', hireDate],
       );
 
       if (upsertResult.rows[0]?.inserted) {
@@ -344,6 +355,7 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       }
     }
 
+    await logAuditEvent({ actionType: 'employee.imported', actorEmail: req.user!.email, targetEntity: 'employees', targetId: 'import-csv', metadata: { rowsProcessed: lines.length - 1, inserted, updated, rejected } });
     res.json({
       success: true,
       data: {

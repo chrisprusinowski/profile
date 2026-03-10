@@ -19,7 +19,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
   let allocated = 0;
   let bonusAllocated = 0;
   let sumPct = 0;
-  const statusCounts = { Draft: 0, Submitted: 0, Approved: 0, Flagged: 0 };
+  const statusCounts = { Draft: 0, Submitted: 0, Locked: 0 };
   const performanceDistribution: Record<string, number> = {
     '1': 0,
     '2': 0,
@@ -45,9 +45,8 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
   const avgPct = employees.length ? sumPct / employees.length : 0;
   const remaining = budgetTotal - allocated;
   const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
-  const submitted =
-    statusCounts.Submitted + statusCounts.Approved + statusCounts.Flagged;
-  const flagged = statusCounts.Flagged;
+  const submitted = statusCounts.Submitted + statusCounts.Locked;
+  const flagged: number = 0;
 
   // ── Department breakdown ──────────────────────────────────────
   const deptMap: Record<string, { payroll: number; headcount: number }> = {};
@@ -110,7 +109,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
           <span
             className={`badge ${cycle?.status === 'open' ? 'badge-green' : 'badge-gray'}`}
           >
-            {cycle?.status === 'open' ? '● Cycle Open' : '○ Cycle Closed'}
+            {cycle?.status === 'open' ? '● Cycle Open' : cycle?.status === 'locked' ? '● Cycle Locked' : '○ Cycle Closed'}
           </span>
         </div>
       </header>
@@ -426,18 +425,6 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
                     recommendations
                   </strong>{' '}
                   — go to Merit Recommendations to complete them.
-                </div>
-              </div>
-            )}
-            {flagged > 0 && (
-              <div className="alert alert-blue" style={{ margin: 0 }}>
-                <div className="alert-icon">ℹ</div>
-                <div>
-                  <strong>
-                    {flagged} merit increase{flagged !== 1 ? 's' : ''} exceed
-                    {flagged === 1 ? 's' : ''} the {guidelineMax}% guideline
-                  </strong>{' '}
-                  and require additional approval.
                 </div>
               </div>
             )}

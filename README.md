@@ -134,3 +134,26 @@ The client includes a **Local Demo Mode** user switcher in the sidebar so you ca
 - CSV import currently supports JSON payload (`csvContent` or `filePath`) rather than multipart upload.
 - Basic single-instance local workflow; no advanced concurrency controls.
 - No CSV write-back to disk.
+
+
+## Local review workflow (v2)
+
+1. Run migrations to include workflow and audit tables:
+   - `./scripts/migrate.sh`
+2. Start API and client.
+3. As **admin**:
+   - Import employees (`Employees` page CSV import)
+   - Import pay ranges (`Admin Settings` -> Pay Ranges import)
+   - Configure cycle status (`open` / `closed` / `locked`)
+   - Manage users with manager scope email (preferred) and manager scope name (legacy fallback)
+4. As **manager**:
+   - Edit team recommendations while cycle is `open` and recommendation is `Draft`
+   - Submit drafts (`Submit All Drafts`)
+5. As **admin**:
+   - Lock submitted recommendations (`Lock Submitted`)
+   - Reopen locked recommendations (`Reopen Locked`)
+6. Export CSV outputs from `Admin Settings` -> `Exports`.
+
+### Demo identity note
+
+Auth is intentionally local/demo-only and uses `x-demo-user-email` plus `app_users` role mapping. This is a deliberate local-review setup and not enterprise SSO.

@@ -52,7 +52,13 @@ export interface Recommendation {
   bonusPayoutPercent: number;
   bonusPayoutAmount: number;
   notes: string;
-  status: 'Draft' | 'Submitted' | 'Approved' | 'Flagged';
+  status: 'Draft' | 'Submitted' | 'Locked';
+  meritAmount?: number;
+  updatedBy?: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  lockedAt?: string;
+  lockedBy?: string;
   updatedAt?: string;
 }
 
@@ -79,5 +85,6 @@ export interface AppUser {
   email: string;
   role: AppRole;
   managerName?: string | null;
+  managerEmail?: string | null;
   isActive: boolean;
 }

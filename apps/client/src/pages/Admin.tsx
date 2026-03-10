@@ -10,6 +10,7 @@ import {
   updatePayRange,
   type AppUserRecord,
   saveCycle,
+  downloadExport,
   type PayRangeImportSummary,
 } from '../api/client.js';
 
@@ -45,6 +46,7 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<AppRole>('manager');
   const [newManagerName, setNewManagerName] = useState('');
+  const [newManagerEmail, setNewManagerEmail] = useState('');
   const [payRanges, setPayRanges] = useState<PayRange[]>([]);
   const [rangeForm, setRangeForm] = useState<PayRange>(EMPTY_RANGE);
   const [editingRangeId, setEditingRangeId] = useState<number | null>(null);
@@ -84,11 +86,12 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
 
   async function handleCreateUser() {
     try {
-      await createAppUser({ email: newEmail, role: newRole, managerName: newRole === 'manager' ? newManagerName : '' });
+      await createAppUser({ email: newEmail, role: newRole, managerName: newRole === 'manager' ? newManagerName : '', managerEmail: newRole === 'manager' ? newManagerEmail : '' });
       showToast('App user created');
       setNewEmail('');
       setNewRole('manager');
       setNewManagerName('');
+      setNewManagerEmail('');
       await refreshAll();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to create app user');
@@ -165,6 +168,7 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Budget %</label><input className="form-input" type="number" value={form.budgetPct} onChange={(e) => update('budgetPct', Number(e.target.value) || 0)} /></div>
                 <div className="form-group"><label className="form-label">Guideline Max %</label><input className="form-input" type="number" value={form.guidelineMax} onChange={(e) => update('guidelineMax', Number(e.target.value) || 0)} /></div>
+                <div className="form-group"><label className="form-label">Cycle Status</label><select className="form-select" value={form.status} onChange={(e) => update('status', e.target.value)}><option value="open">open</option><option value="closed">closed</option><option value="locked">locked</option></select></div>
               </div>
               <div className="form-hint">Loaded payroll: ${Math.round(totalPayroll).toLocaleString()}</div>
             </div>
@@ -218,6 +222,13 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
           </div>
         </div>
 
+        <div className="card mb-20">
+          <div className="card-header"><div className="card-title">Exports</div></div>
+          <div className="card-body">
+            <button className="btn btn-secondary" type="button" onClick={async () => { const text = await downloadExport('employees.csv'); const blob = new Blob([text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'employees.csv'; a.click(); showToast('Employee export downloaded'); }}>Export Employees CSV</button>
+            <button className="btn btn-secondary" style={{ marginLeft: 8 }} type="button" onClick={async () => { const text = await downloadExport('recommendations.csv'); const blob = new Blob([text], { type: 'text/csv' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'recommendations.csv'; a.click(); showToast('Recommendations export downloaded'); }}>Export Recommendations CSV</button>
+          </div>
+        </div>
         <div className="card">
           <div className="card-header"><div className="card-title">User Permissions (Demo)</div></div>
           <div className="card-body">
@@ -225,19 +236,20 @@ export function Admin({ employees, cycle, showToast, setCycle, demoUsers, refres
             <div className="form-row">
               <div className="form-group"><label className="form-label">Email</label><input className="form-input" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="new.manager@demo.com" /></div>
               <div className="form-group"><label className="form-label">Role</label><select className="form-select" value={newRole} onChange={(e) => setNewRole(e.target.value as AppRole)}><option value="admin">admin</option><option value="executive">executive</option><option value="manager">manager</option></select></div>
-              {newRole === 'manager' && <div className="form-group"><label className="form-label">Manager Scope Name</label><input className="form-input" value={newManagerName} onChange={(e) => setNewManagerName(e.target.value)} placeholder="Jamie Rivera" /></div>}
+              {newRole === 'manager' && <><div className="form-group"><label className="form-label">Manager Scope Name</label><input className="form-input" value={newManagerName} onChange={(e) => setNewManagerName(e.target.value)} placeholder="Jamie Rivera" /></div><div className="form-group"><label className="form-label">Manager Scope Email (preferred)</label><input className="form-input" value={newManagerEmail} onChange={(e) => setNewManagerEmail(e.target.value)} placeholder="manager1@demo.com" /></div></>}
             </div>
             <button className="btn btn-secondary" onClick={handleCreateUser} type="button">Add App User</button>
           </div>
           <div className="card-body" style={{ paddingTop: 0 }}>
             <table className="data-table">
-              <thead><tr><th>Email</th><th>Role</th><th>Manager Scope</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Email</th><th>Role</th><th>Manager Scope</th><th>Manager Email</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {demoUsers.map((user) => (
                   <tr key={user.email}>
                     <td>{user.email}</td>
                     <td>{user.role}</td>
                     <td>{user.managerName || '—'}</td>
+                    <td>{user.managerEmail || '—'}</td>
                     <td>{user.isActive ? 'Active' : 'Inactive'}</td>
                     <td><button className="btn btn-secondary btn-sm" type="button" onClick={() => void handleToggleActive(user)}>{user.isActive ? 'Deactivate' : 'Activate'}</button></td>
                   </tr>
