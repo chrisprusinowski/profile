@@ -1,5 +1,6 @@
 import type { Employee, Cycle, RecommendationMap } from '../types.js';
 import { fmt, fmtK, avatarColor, initials, getEligibility } from '../utils.js';
+import { buildBudgetSnapshot } from '../comp.js';
 
 interface Props {
   employees: Employee[];
@@ -12,11 +13,9 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
   const meritBudgetPct = cycle?.meritBudgetPercent ?? cycle?.budgetPct ?? 3.5;
   const guidelineMax = cycle?.guidelineMaxPercent ?? cycle?.guidelineMax ?? 10;
 
-  let eligiblePayroll = 0;
-  let allocated = 0;
-  let bonusAllocated = 0;
-  let sumPct = 0;
-  let eligibleCount = 0;
+  const snapshot = buildBudgetSnapshot(employees, cycle, recommendations);
+  const allocated = snapshot.meritAllocated;
+  const bonusAllocated = snapshot.bonusAllocated;
   const statusCounts = { Draft: 0, Submitted: 0, Locked: 0 };
   const performanceDistribution: Record<string, number> = {
     '1': 0,
@@ -32,15 +31,9 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
     const useOverride =
       eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
     const budgetBase = useOverride ? e.salary : eligibleBase;
-    if (budgetBase > 0) eligibleCount += 1;
-    eligiblePayroll += budgetBase;
+
     const pct = rec?.meritPct ?? 0;
-    allocated += budgetBase * (pct / 100);
-    bonusAllocated +=
-      rec?.bonusPayoutAmount && rec?.bonusPayoutAmount > 0
-        ? rec.bonusPayoutAmount
-        : budgetBase * ((rec?.bonusPayoutPercent ?? 0) / 100);
-    sumPct += pct;
+
     const ratingKey = rec?.performanceRating
       ? String(rec.performanceRating)
       : 'Unrated';
@@ -50,12 +43,10 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
     statusCounts[s] = (statusCounts[s] ?? 0) + 1;
   }
 
-  const budgetTotal = cycle?.budgetTotal
-    ? Number(cycle.budgetTotal)
-    : eligiblePayroll * (meritBudgetPct / 100);
-  const avgPct = eligibleCount ? sumPct / eligibleCount : 0;
-  const remaining = budgetTotal - allocated;
-  const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
+  const budgetTotal = snapshot.meritBudgetTotal;
+  const avgPct = snapshot.avgMeritPct;
+  const remaining = snapshot.remainingMeritBudget;
+  const pctUsed = snapshot.pctUsed;
   const submitted = statusCounts.Submitted + statusCounts.Locked;
   const flagged = employees.filter(
     (e) => (recommendations[e.id]?.meritPct ?? 0) > guidelineMax
@@ -169,7 +160,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
             <div className="metric-label">Cycle Budget</div>
             <div className="metric-value">{fmtK(budgetTotal)}</div>
             <div className="metric-sub">
-              {meritBudgetPct.toFixed(2)}% of eligible payroll
+              {meritBudgetPct.toFixed(2)}% of payroll basis
             </div>
           </div>
 
@@ -186,7 +177,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
             <div className="metric-label">Budget Allocated</div>
             <div className="metric-value">{fmtK(allocated)}</div>
             <div className="metric-sub">
-              {Math.round(pctUsed * 100)}% of budget used
+              {(pctUsed * 100).toFixed(2)}% of budget used
             </div>
             <div className="progress-bar">
               <div
@@ -225,7 +216,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
             <div className="metric-label">Bonus Payout</div>
             <div className="metric-value">{fmtK(bonusAllocated)}</div>
             <div className="metric-sub">
-              {depts.length
+              Payroll basis {fmt(snapshot.payrollBasis)} · {depts.length
                 ? `Across ${depts.length} department${depts.length !== 1 ? 's' : ''}`
                 : 'No departments mapped'}
             </div>

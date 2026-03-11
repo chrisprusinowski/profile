@@ -6,6 +6,23 @@ import { pool } from '../db.js';
 
 export const cycleRouter = Router();
 
+
+const twoDecimalNumber = (min: number, max?: number) => {
+  const schema = z.coerce.number().finite().min(min);
+  const bounded = max == null ? schema : schema.max(max);
+  return bounded.refine((value) => {
+    const scaled = value * 100;
+    return Math.abs(scaled - Math.round(scaled)) < 1e-8;
+  }, {
+    message: 'Must have at most 2 decimal places'
+  });
+};
+
+function roundTo(value: number, decimals = 2) {
+  const p = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * p) / p;
+}
+
 const cycleSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   name: z.string().trim().min(1),
@@ -13,14 +30,14 @@ const cycleSchema = z.object({
   openDate: z.string().trim().optional().nullable(),
   closeDate: z.string().trim().optional().nullable(),
   effectiveDate: z.string().trim().optional().nullable(),
-  totalPayroll: z.coerce.number().min(0).optional().nullable(),
-  budgetPct: z.coerce.number().min(0).max(100).optional().nullable(),
-  budgetTotal: z.coerce.number().min(0).optional().nullable(),
-  guidelineMin: z.coerce.number().min(0).max(100).optional().nullable(),
-  guidelineMax: z.coerce.number().min(0).max(100).optional().nullable(),
-  meritBudgetPercent: z.coerce.number().min(0).max(100).optional().nullable(),
-  bonusBudgetPercent: z.coerce.number().min(0).max(100).optional().nullable(),
-  guidelineMaxPercent: z.coerce.number().min(0).max(100).optional().nullable(),
+  totalPayroll: twoDecimalNumber(0).optional().nullable(),
+  budgetPct: twoDecimalNumber(0, 100).optional().nullable(),
+  budgetTotal: twoDecimalNumber(0).optional().nullable(),
+  guidelineMin: twoDecimalNumber(0, 100).optional().nullable(),
+  guidelineMax: twoDecimalNumber(0, 100).optional().nullable(),
+  meritBudgetPercent: twoDecimalNumber(0, 100).optional().nullable(),
+  bonusBudgetPercent: twoDecimalNumber(0, 100).optional().nullable(),
+  guidelineMaxPercent: twoDecimalNumber(0, 100).optional().nullable(),
   minTenureDays: z.coerce.number().int().min(0).optional().nullable(),
   allowEligibilityOverride: z.boolean().optional(),
   enableProration: z.boolean().optional(),
@@ -97,9 +114,14 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
         .status(400)
         .json({ error: 'Validation failed', details: parsed.error.flatten() });
     const payload = parsed.data;
-    const guidelineMin = payload.guidelineMin ?? 0;
-    const guidelineMax =
-      payload.guidelineMaxPercent ?? payload.guidelineMax ?? 10;
+    const guidelineMin = roundTo(payload.guidelineMin ?? 0);
+    const guidelineMax = roundTo(
+      payload.guidelineMaxPercent ?? payload.guidelineMax ?? 10
+    );
+    const meritBudgetPercent = roundTo(payload.meritBudgetPercent ?? payload.budgetPct ?? 3.5);
+    const bonusBudgetPercent = roundTo(payload.bonusBudgetPercent ?? 10);
+    const totalPayroll = payload.totalPayroll == null ? null : roundTo(payload.totalPayroll);
+    const budgetTotal = payload.budgetTotal == null ? null : roundTo(payload.budgetTotal);
 
     if (guidelineMin > guidelineMax) {
       return res
@@ -155,13 +177,13 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
           payload.openDate ?? '',
           payload.closeDate ?? '',
           payload.effectiveDate ?? '',
-          payload.totalPayroll ?? null,
-          payload.meritBudgetPercent ?? payload.budgetPct ?? null,
-          payload.budgetTotal ?? null,
+          totalPayroll,
+          meritBudgetPercent,
+          budgetTotal,
           guidelineMin,
           guidelineMax,
-          payload.meritBudgetPercent ?? payload.budgetPct ?? 3.5,
-          payload.bonusBudgetPercent ?? 10,
+          meritBudgetPercent,
+          bonusBudgetPercent,
           guidelineMax,
           payload.minTenureDays ?? 0,
           payload.allowEligibilityOverride ?? false,
@@ -197,13 +219,13 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
         payload.openDate ?? '',
         payload.closeDate ?? '',
         payload.effectiveDate ?? '',
-        payload.totalPayroll ?? null,
-        payload.meritBudgetPercent ?? payload.budgetPct ?? null,
-        payload.budgetTotal ?? null,
+        totalPayroll,
+        meritBudgetPercent,
+        budgetTotal,
         guidelineMin,
         guidelineMax,
-        payload.meritBudgetPercent ?? payload.budgetPct ?? 3.5,
-        payload.bonusBudgetPercent ?? 10,
+        meritBudgetPercent,
+        bonusBudgetPercent,
         guidelineMax,
         payload.minTenureDays ?? 0,
         payload.allowEligibilityOverride ?? false,

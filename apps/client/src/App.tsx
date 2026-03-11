@@ -78,7 +78,7 @@ export default function App() {
   const flaggedCount = cycle
     ? employees.filter(
         (e) =>
-          (recommendations[e.id]?.meritPct ?? 0) > cycle.guidelineMaxPercent
+          (recommendations[e.id]?.meritPct ?? 0) > (cycle.guidelineMaxPercent ?? cycle.guidelineMax)
       ).length
     : 0;
 
