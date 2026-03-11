@@ -1,5 +1,5 @@
 import type { Employee, Cycle, RecommendationMap } from '../types.js';
-import { fmt, fmtK, avatarColor, initials } from '../utils.js';
+import { fmt, fmtK, avatarColor, initials, getEligibility } from '../utils.js';
 
 interface Props {
   employees: Employee[];
@@ -9,14 +9,14 @@ interface Props {
 
 export function Dashboard({ employees, cycle, recommendations }: Props) {
   // ── Budget computations ──────────────────────────────────────
-  const totalActualPayroll = employees.reduce((s, e) => s + e.salary, 0);
-  const budgetTotal = cycle?.budgetTotal
-    ? Number(cycle.budgetTotal)
-    : totalActualPayroll * ((cycle?.budgetPct ?? 3.5) / 100);
+  const meritBudgetPct = cycle?.meritBudgetPercent ?? cycle?.budgetPct ?? 3.5;
+  const guidelineMax = cycle?.guidelineMaxPercent ?? cycle?.guidelineMax ?? 10;
 
+  let eligiblePayroll = 0;
   let allocated = 0;
   let bonusAllocated = 0;
   let sumPct = 0;
+  let eligibleCount = 0;
   const statusCounts = { Draft: 0, Submitted: 0, Locked: 0 };
   const performanceDistribution: Record<string, number> = {
     '1': 0,
@@ -27,9 +27,19 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
 
   for (const e of employees) {
     const rec = recommendations[e.id];
+    const eligibility = getEligibility(e.hireDate, cycle);
+    const eligibleBase = e.salary * eligibility.eligibilityPercent;
+    const useOverride =
+      eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
+    const budgetBase = useOverride ? e.salary : eligibleBase;
+    if (budgetBase > 0) eligibleCount += 1;
+    eligiblePayroll += budgetBase;
     const pct = rec?.meritPct ?? 0;
-    allocated += e.salary * (pct / 100);
-    bonusAllocated += rec?.bonusPayoutAmount ?? 0;
+    allocated += budgetBase * (pct / 100);
+    bonusAllocated +=
+      rec?.bonusPayoutAmount && rec?.bonusPayoutAmount > 0
+        ? rec.bonusPayoutAmount
+        : budgetBase * ((rec?.bonusPayoutPercent ?? 0) / 100);
     sumPct += pct;
     const ratingKey = rec?.performanceRating
       ? String(rec.performanceRating)
@@ -40,11 +50,16 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
     statusCounts[s] = (statusCounts[s] ?? 0) + 1;
   }
 
-  const avgPct = employees.length ? sumPct / employees.length : 0;
+  const budgetTotal = cycle?.budgetTotal
+    ? Number(cycle.budgetTotal)
+    : eligiblePayroll * (meritBudgetPct / 100);
+  const avgPct = eligibleCount ? sumPct / eligibleCount : 0;
   const remaining = budgetTotal - allocated;
   const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
   const submitted = statusCounts.Submitted + statusCounts.Locked;
-  const flagged: number = 0;
+  const flagged = employees.filter(
+    (e) => (recommendations[e.id]?.meritPct ?? 0) > guidelineMax
+  ).length;
 
   // ── Department breakdown ──────────────────────────────────────
   const deptMap: Record<string, { payroll: number; headcount: number }> = {};
@@ -54,7 +69,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
     deptMap[d].payroll += e.salary;
     deptMap[d].headcount += 1;
   }
-  const meritPct = cycle?.budgetPct ?? 3.5;
+  const meritPct = meritBudgetPct;
   const deptRows = Object.entries(deptMap)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dept, stats]) => ({
@@ -154,7 +169,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
             <div className="metric-label">Cycle Budget</div>
             <div className="metric-value">{fmtK(budgetTotal)}</div>
             <div className="metric-sub">
-              {(cycle?.budgetPct ?? 3.5).toFixed(1)}% of payroll
+              {meritBudgetPct.toFixed(2)}% of eligible payroll
             </div>
           </div>
 
@@ -305,8 +320,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
               <div>
                 <div className="card-title">Budget by Department</div>
                 <div className="card-subtitle">
-                  Merit budget at {(cycle?.budgetPct ?? 3.5).toFixed(1)}% of
-                  payroll
+                  Merit budget at {meritBudgetPct.toFixed(2)}% of payroll
                 </div>
               </div>
             </div>
@@ -432,6 +446,18 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
                 <div>
                   <strong>{fmtK(remaining)} remaining in budget</strong> — avg
                   merit % is {avgPct.toFixed(1)}%.
+                </div>
+              </div>
+            )}
+            {flagged > 0 && (
+              <div className="alert alert-amber" style={{ margin: 0 }}>
+                <div className="alert-icon">⚠</div>
+                <div>
+                  <strong>
+                    {flagged} recommendation{flagged !== 1 ? 's' : ''} exceed{' '}
+                    {guidelineMax}% guideline max
+                  </strong>{' '}
+                  — review flagged increases in Merit Recommendations.
                 </div>
               </div>
             )}

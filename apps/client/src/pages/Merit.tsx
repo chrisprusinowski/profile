@@ -292,7 +292,7 @@ export function Merit({
             </div>
             <div>
               <div className="budget-item-label">Avg Merit %</div>
-              <div className="budget-item-value">{avgPct.toFixed(1)}%</div>
+              <div className="budget-item-value">{avgPct.toFixed(2)}%</div>
             </div>
           </div>
           <div className="progress-bar">
@@ -419,7 +419,7 @@ export function Merit({
                       )}
                     </td>
                     <td className="numeric">
-                      {(eligibility.eligibilityPercent * 100).toFixed(0)}%
+                      {(eligibility.eligibilityPercent * 100).toFixed(1)}%
                     </td>
                     <td style={{ fontSize: 12 }}>
                       {pay?.matchedRangeMin != null &&
@@ -447,7 +447,7 @@ export function Merit({
                       <input
                         className="merit-pct-input"
                         type="number"
-                        step="0.1"
+                        step="0.01"
                         defaultValue={meritPct}
                         key={`${e.id}-m-${meritPct}`}
                         disabled={locked}
@@ -462,7 +462,7 @@ export function Merit({
                       <input
                         className="merit-pct-input"
                         type="number"
-                        step="0.1"
+                        step="0.01"
                         defaultValue={rec?.bonusPayoutPercent ?? 0}
                         key={`${e.id}-bp-${rec?.bonusPayoutPercent ?? 0}`}
                         disabled={locked}
@@ -550,7 +550,7 @@ export function Merit({
                 <input
                   className="form-input"
                   type="number"
-                  step="0.1"
+                  step="0.01"
                   value={modalData.bonusTargetPercent ?? ''}
                   onChange={(e) =>
                     setModalData((d) => ({
