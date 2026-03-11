@@ -58,10 +58,22 @@ function normalizeHeader(header: string): string {
 }
 
 function parseDateInput(value: string | undefined): string | null {
-  if (!value || !value.trim()) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  if (
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() + 1 !== month ||
+    dt.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return trimmed;
 }
 
 async function loadPayRanges(): Promise<PayRangeRecord[]> {

@@ -40,6 +40,7 @@ export interface AppUserRecord extends AppUser {
 
 const LS_CYCLE = 'mc_cycle_v2';
 const LS_RECS = 'mc_recommendations_v2';
+const ISO_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const DEFAULT_CYCLE: Cycle = {
   name: '2026 Annual Merit Cycle',
@@ -362,18 +363,55 @@ export async function fetchCycle(): Promise<Cycle> {
 }
 
 export async function saveCycle(cycle: Cycle): Promise<Cycle> {
+  const normalizeDate = (value?: string | null): string | null => {
+    const trimmed = value?.trim() ?? '';
+    if (!trimmed) return null;
+    const match = ISO_DATE_ONLY.exec(trimmed);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const utcDate = new Date(Date.UTC(year, month - 1, day));
+    if (
+      utcDate.getUTCFullYear() !== year ||
+      utcDate.getUTCMonth() + 1 !== month ||
+      utcDate.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return trimmed;
+  };
+
+  const payload = {
+    ...cycle,
+    openDate: normalizeDate(cycle.openDate),
+    closeDate: normalizeDate(cycle.closeDate),
+    effectiveDate: normalizeDate(cycle.effectiveDate),
+    prorationStartDate: normalizeDate(cycle.prorationStartDate),
+    eligibilityCutoffDate: normalizeDate(cycle.eligibilityCutoffDate)
+  };
+
   if (API_BASE) {
     const res = await authedFetch(`${API_BASE}/api/v1/cycle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cycle)
+      body: JSON.stringify(payload)
     });
     if (!res.ok)
       throw await parseError(res, `Failed to save cycle: ${res.status}`);
     return res.json() as Promise<Cycle>;
   }
-  localStorage.setItem(LS_CYCLE, JSON.stringify(cycle));
-  return cycle;
+  const localCycle: Cycle = {
+    ...cycle,
+    openDate: payload.openDate ?? '',
+    closeDate: payload.closeDate ?? '',
+    effectiveDate: payload.effectiveDate ?? '',
+    prorationStartDate: payload.prorationStartDate ?? '',
+    eligibilityCutoffDate: payload.eligibilityCutoffDate ?? ''
+  };
+  localStorage.setItem(LS_CYCLE, JSON.stringify(localCycle));
+  return localCycle;
 }
 
 export async function fetchRecommendations(): Promise<RecommendationMap> {
