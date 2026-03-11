@@ -7,6 +7,7 @@ import { usersRouter } from './routes/users.js';
 import { payRangesRouter } from './routes/payRanges.js';
 import { exportsRouter } from './routes/exports.js';
 import { authMiddleware } from './auth.js';
+import { handleApiError } from './errors.js';
 
 export const createApp = () => {
   const app = express();
@@ -51,11 +52,7 @@ export const createApp = () => {
 
   app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
     void next;
-    console.error('[api] Unhandled route error:', error);
-    res.status(500).json({
-      error: 'Internal server error',
-      message: 'An unexpected error occurred',
-    });
+    handleApiError(error, _req, res);
   });
 
   return app;

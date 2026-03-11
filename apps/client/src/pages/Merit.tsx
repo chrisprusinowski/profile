@@ -183,11 +183,19 @@ export function Merit({
       showToast('No draft recommendations to submit');
       return;
     }
-    await submitAllRecommendations(draftIds);
-    await refreshRecommendations();
-    showToast(
-      `${draftIds.length} recommendation${draftIds.length !== 1 ? 's' : ''} submitted`
-    );
+    try {
+      await submitAllRecommendations(draftIds);
+      await refreshRecommendations();
+      showToast(
+        `${draftIds.length} recommendation${draftIds.length !== 1 ? 's' : ''} submitted`
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : 'Failed to submit recommendations'
+      );
+    }
   };
 
   const modalEmployee = modalId
@@ -221,9 +229,17 @@ export function Merit({
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={async () => {
-                  const r = await lockAllRecommendations();
-                  await refreshRecommendations();
-                  showToast(`Locked ${r.locked}`);
+                  try {
+                    const r = await lockAllRecommendations();
+                    await refreshRecommendations();
+                    showToast(`Locked ${r.locked}`);
+                  } catch (error) {
+                    showToast(
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to lock recommendations'
+                    );
+                  }
                 }}
                 style={{ marginLeft: 8 }}
               >
@@ -232,9 +248,17 @@ export function Merit({
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={async () => {
-                  const r = await reopenAllRecommendations();
-                  await refreshRecommendations();
-                  showToast(`Reopened ${r.reopened}`);
+                  try {
+                    const r = await reopenAllRecommendations();
+                    await refreshRecommendations();
+                    showToast(`Reopened ${r.reopened}`);
+                  } catch (error) {
+                    showToast(
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to reopen recommendations'
+                    );
+                  }
                 }}
                 style={{ marginLeft: 8 }}
               >
