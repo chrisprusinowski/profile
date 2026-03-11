@@ -45,7 +45,7 @@
         <div class="page-subtitle">Configure the active merit cycle</div>
       </div>
       <div class="topbar-right">
-        <button class="btn btn-secondary btn-sm">Discard</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadCycleSettings(); renderFinanceModule(); showToast('Changes discarded');">Discard</button>
         <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>
       </div>
     </header>
@@ -64,10 +64,10 @@
             </div>
             <div class="form-group">
               <label class="form-label">Cycle Type</label>
-              <select class="form-select">
-                <option selected>Merit (Salary Increase)</option>
-                <option>Bonus</option>
-                <option>Equity Refresh</option>
+              <select class="form-select" id="cycle-type">
+                <option value="merit">Merit (Salary Increase)</option>
+                <option value="bonus">Bonus</option>
+                <option value="equity">Equity Refresh</option>
               </select>
             </div>
           </div>
@@ -83,7 +83,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">Effective Date</label>
-            <input class="form-input" id="effective-date" type="date" value="2025-07-01" style="max-width:240px;" />
+            <input class="form-input" id="effective-date" type="date" value="2025-07-01" style="max-width:240px;" oninput="updateBudgetHint(); updateProratePreview();" />
             <div class="form-hint">The date when approved merit increases take effect in payroll.</div>
           </div>
         </div>
@@ -98,12 +98,22 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Total Payroll</label>
-              <input class="form-input" id="total-payroll" value="$40,000,000" />
+              <input class="form-input" id="total-payroll" value="$40,000,000" oninput="updateBudgetHint()" />
             </div>
             <div class="form-group">
               <label class="form-label">Merit Budget %</label>
-              <input class="form-input" id="budget-pct" type="number" step="0.1" value="3.5" />
-              <div class="form-hint">Auto-calculates to $1,400,000 total budget.</div>
+              <input class="form-input" id="budget-pct" type="number" step="0.1" min="0" value="3.5" oninput="updateBudgetHint()" />
+              <div class="form-hint" id="merit-budget-hint">Calculated merit budget: <strong id="merit-budget-calc">$1,400,000</strong></div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Bonus Budget %</label>
+              <input class="form-input" id="bonus-budget-pct" type="number" step="0.1" min="0" value="8" oninput="updateBudgetHint()" />
+              <div class="form-hint" id="bonus-budget-hint">Calculated bonus budget: <strong id="bonus-budget-calc">$3,200,000</strong></div>
+            </div>
+            <div class="form-group">
+              <!-- spacer -->
             </div>
           </div>
           <div class="form-group">
@@ -111,12 +121,49 @@
             <div class="form-row">
               <div>
                 <label class="form-label" style="font-weight:400; font-size:12px;">Minimum %</label>
-                <input class="form-input" id="guideline-min" type="number" value="0" />
+                <input class="form-input" id="guideline-min" type="number" step="0.1" min="0" value="0" oninput="updateGuidelineHint()" />
               </div>
               <div>
                 <label class="form-label" style="font-weight:400; font-size:12px;">Maximum % (before approval required)</label>
-                <input class="form-input" id="guideline-max" type="number" value="10" />
+                <input class="form-input" id="guideline-max" type="number" step="0.1" min="0" value="10" oninput="updateGuidelineHint()" />
               </div>
+            </div>
+            <div class="form-hint" id="guideline-hint" style="margin-top:6px;">Recommendations above <strong id="guideline-max-display">10%</strong> will be flagged and require additional approval.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Proration Settings -->
+      <div class="card mb-20">
+        <div class="card-header">
+          <div class="card-title">Proration &amp; Eligibility Cutoff</div>
+          <div class="card-subtitle">Control how mid-year hires receive merit and bonus</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group" style="margin-bottom:16px;">
+            <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
+              <input type="checkbox" id="prorate-enabled" checked onchange="updateProratePreview()" />
+              <span><strong>Enable proration for mid-year hires</strong> — employees hired after the proration start date receive a proportional merit and bonus increase</span>
+            </label>
+          </div>
+
+          <div id="prorate-fields">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Proration Period Start</label>
+                <input class="form-input" id="prorate-start-date" type="date" value="2025-01-01" oninput="updateProratePreview()" style="max-width:220px;" />
+                <div class="form-hint">Employees hired <em>before</em> this date receive 100% of their merit/bonus. Those hired after are prorated.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Hard Eligibility Cutoff Date <span style="font-weight:400; color:var(--gray-500);">(optional)</span></label>
+                <input class="form-input" id="prorate-cutoff-date" type="date" value="" oninput="updateProratePreview()" style="max-width:220px;" />
+                <div class="form-hint">Employees hired <em>on or after</em> this date receive <strong>$0 merit and $0 bonus</strong> — automatically ineligible regardless of other settings.</div>
+              </div>
+            </div>
+
+            <div class="alert alert-blue mt-16" id="prorate-preview">
+              <div class="alert-icon">ℹ</div>
+              <div id="prorate-preview-text">Set dates above to see a proration summary.</div>
             </div>
           </div>
         </div>
@@ -173,38 +220,57 @@
         <div class="card-body">
           <div class="form-group">
             <label class="form-label">Increases above guideline require approval from</label>
-            <select class="form-select" style="max-width:320px;">
-              <option>HR Admin only</option>
-              <option selected>HR Admin + Finance</option>
-              <option>HR Admin + Finance + CEO</option>
+            <select class="form-select" id="approval-level" style="max-width:320px;">
+              <option value="hr">HR Admin only</option>
+              <option value="hr+finance" selected>HR Admin + Finance</option>
+              <option value="hr+finance+ceo">HR Admin + Finance + CEO</option>
             </select>
-          </div>
-          <div class="alert alert-blue mt-16">
-            <div class="alert-icon">ℹ</div>
-            <div>Full approval chain configuration (multi-level, conditional routing) is coming in the next release.</div>
           </div>
         </div>
       </div>
 
-      <!-- Eligible employees -->
+      <!-- Eligibility rules -->
       <div class="card">
         <div class="card-header">
           <div class="card-title">Eligibility Rules</div>
+          <div class="card-subtitle">Employees matching these rules are automatically marked ineligible</div>
         </div>
         <div class="card-body">
-          <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; flex-direction:column; gap:16px;">
+
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" id="excl-recent" checked />
+                Exclude employees hired within the last
+              </label>
+              <input class="form-input" id="eligibility-cutoff-days" type="number" min="0" value="90"
+                style="width:80px; display:inline-block;" />
+              <span style="font-size:13.5px;">days of the effective date</span>
+            </div>
+            <div class="form-hint" style="margin-top:-8px; margin-left:24px;">
+              For a more precise hard cutoff, set an Eligibility Cutoff Date in Proration settings above.
+            </div>
+
             <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
-              <input type="checkbox" checked /> Exclude employees hired within last 90 days
+              <input type="checkbox" id="excl-pip" checked />
+              Exclude employees on a Performance Improvement Plan (PIP)
             </label>
+
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" id="excl-promoted" />
+                Exclude employees promoted within the last
+              </label>
+              <input class="form-input" id="excl-promoted-months" type="number" min="0" value="6"
+                style="width:70px; display:inline-block;" />
+              <span style="font-size:13.5px;">months</span>
+            </div>
+
             <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
-              <input type="checkbox" checked /> Exclude employees on a Performance Improvement Plan (PIP)
+              <input type="checkbox" id="excl-parttime" />
+              Exclude part-time employees
             </label>
-            <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
-              <input type="checkbox" /> Exclude employees promoted within the last 6 months
-            </label>
-            <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; cursor:pointer;">
-              <input type="checkbox" /> Exclude part-time employees
-            </label>
+
           </div>
         </div>
       </div>
@@ -228,9 +294,65 @@
   function fmt(n) { return '$' + Math.round(n || 0).toLocaleString(); }
   function toNumber(v) { return Number(String(v || '').replace(/[$,\s]/g, '')) || 0; }
 
+  function updateBudgetHint() {
+    const payroll    = toNumber(document.getElementById('total-payroll').value);
+    const meritPct   = parseFloat(document.getElementById('budget-pct').value) || 0;
+    const bonusPct   = parseFloat(document.getElementById('bonus-budget-pct').value) || 0;
+    const meritTotal = payroll * (meritPct / 100);
+    const bonusTotal = payroll * (bonusPct / 100);
+    document.getElementById('merit-budget-calc').textContent = fmt(meritTotal);
+    document.getElementById('bonus-budget-calc').textContent = fmt(bonusTotal);
+  }
+
+  function updateGuidelineHint() {
+    const max = parseFloat(document.getElementById('guideline-max').value) || 0;
+    document.getElementById('guideline-max-display').textContent = max + '%';
+  }
+
+  function updateProratePreview() {
+    const enabled    = document.getElementById('prorate-enabled').checked;
+    const startDate  = document.getElementById('prorate-start-date').value;
+    const cutoffDate = document.getElementById('prorate-cutoff-date').value;
+    const effectDate = document.getElementById('effective-date').value;
+
+    if (!enabled) {
+      document.getElementById('prorate-preview-text').textContent =
+        'Proration is disabled. All eligible employees receive their full merit and bonus amount.';
+      return;
+    }
+
+    const parts = [];
+    if (startDate) {
+      const d = new Date(startDate);
+      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      parts.push(`Hired before ${label}: 100% merit and bonus.`);
+    }
+    if (startDate && effectDate) {
+      const s = new Date(startDate);
+      const e = new Date(effectDate);
+      const end = cutoffDate ? new Date(cutoffDate) : e;
+      if (s < end) {
+        const sl = s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const el = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        parts.push(`Hired ${sl} – ${el}: prorated by fraction of time employed.`);
+      }
+    }
+    if (cutoffDate) {
+      const d = new Date(cutoffDate);
+      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      parts.push(`Hired on or after ${label}: automatically ineligible ($0 merit and bonus).`);
+    } else if (effectDate) {
+      const d = new Date(effectDate);
+      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      parts.push(`Hired on or after ${label} (effective date): $0 merit and bonus via the "days" eligibility rule.`);
+    }
+
+    document.getElementById('prorate-preview-text').innerHTML = parts.join(' ') || 'Set dates above to see a proration summary.';
+  }
+
   function renderFinanceModule() {
-    const body     = document.getElementById('finance-table-body');
-    const finance  = Store.getFinanceModule();
+    const body      = document.getElementById('finance-table-body');
+    const finance   = Store.getFinanceModule();
     const breakdown = Store.getTeamBudgetBreakdown();
 
     document.getElementById('finance-default-merit').value = finance.defaultMeritPct;
@@ -261,31 +383,78 @@
 
   function loadCycleSettings() {
     const cycle = Store.getCycle();
-    document.getElementById('cycle-name').value = cycle.name || '';
-    document.getElementById('open-date').value = cycle.openDate || '';
-    document.getElementById('close-date').value = cycle.closeDate || '';
-    document.getElementById('effective-date').value = cycle.effectiveDate || '';
-    document.getElementById('total-payroll').value = fmt(cycle.totalPayroll || 0);
-    document.getElementById('budget-pct').value = cycle.budgetPct ?? 3.5;
-    document.getElementById('guideline-min').value = cycle.guidelineMin ?? 0;
-    document.getElementById('guideline-max').value = cycle.guidelineMax ?? 10;
+    document.getElementById('cycle-name').value      = cycle.name || '';
+    document.getElementById('cycle-type').value      = cycle.type || 'merit';
+    document.getElementById('open-date').value       = cycle.openDate || '';
+    document.getElementById('close-date').value      = cycle.closeDate || '';
+    document.getElementById('effective-date').value  = cycle.effectiveDate || '';
+
+    const totalPayroll = toNumber(cycle.totalPayroll) || 0;
+    document.getElementById('total-payroll').value   = fmt(totalPayroll);
+    document.getElementById('budget-pct').value      = cycle.budgetPct ?? 3.5;
+    document.getElementById('bonus-budget-pct').value = cycle.bonusBudgetPct ?? 8;
+    document.getElementById('guideline-min').value   = cycle.guidelineMin ?? 0;
+    document.getElementById('guideline-max').value   = cycle.guidelineMax ?? 10;
+
+    // Proration
+    document.getElementById('prorate-enabled').checked       = cycle.prorateEnabled !== false;
+    document.getElementById('prorate-start-date').value      = cycle.prorateStartDate || '2025-01-01';
+    document.getElementById('prorate-cutoff-date').value     = cycle.prorateCutoffDate || '';
+
+    // Eligibility
+    document.getElementById('excl-recent').checked           = cycle.eligibilityCutoffEnabled !== false;
+    document.getElementById('eligibility-cutoff-days').value = cycle.eligibilityCutoffDays ?? 90;
+    document.getElementById('excl-pip').checked              = cycle.excludePIP !== false;
+    document.getElementById('excl-promoted').checked         = cycle.excludePromoted || false;
+    document.getElementById('excl-promoted-months').value    = cycle.excludePromotedMonths ?? 6;
+    document.getElementById('excl-parttime').checked         = cycle.excludePartTime || false;
+
+    // Approval
+    document.getElementById('approval-level').value          = cycle.approvalLevel || 'hr+finance';
+
+    // Sidebar
     document.getElementById('sb-cycle-name').textContent = cycle.name || '2025 Annual Merit Cycle';
+
+    updateBudgetHint();
+    updateGuidelineHint();
+    updateProratePreview();
   }
 
   function saveSettings() {
     const cycle = Store.getCycle();
+    const totalPayroll  = toNumber(document.getElementById('total-payroll').value);
+    const budgetPct     = parseFloat(document.getElementById('budget-pct').value) || 0;
+    const bonusBudgetPct = parseFloat(document.getElementById('bonus-budget-pct').value) || 0;
+
     const nextCycle = {
       ...cycle,
-      name: document.getElementById('cycle-name').value.trim() || cycle.name,
-      openDate: document.getElementById('open-date').value,
-      closeDate: document.getElementById('close-date').value,
+      name:          document.getElementById('cycle-name').value.trim() || cycle.name,
+      type:          document.getElementById('cycle-type').value,
+      openDate:      document.getElementById('open-date').value,
+      closeDate:     document.getElementById('close-date').value,
       effectiveDate: document.getElementById('effective-date').value,
-      totalPayroll: toNumber(document.getElementById('total-payroll').value),
-      budgetPct: Number(document.getElementById('budget-pct').value) || 0,
-      guidelineMin: Number(document.getElementById('guideline-min').value) || 0,
-      guidelineMax: Number(document.getElementById('guideline-max').value) || 0,
+      totalPayroll,
+      budgetPct,
+      budgetTotal:   totalPayroll * (budgetPct / 100),
+      bonusBudgetPct,
+      bonusBudgetTotal: totalPayroll * (bonusBudgetPct / 100),
+      guidelineMin:  parseFloat(document.getElementById('guideline-min').value) || 0,
+      guidelineMax:  parseFloat(document.getElementById('guideline-max').value) || 0,
+      // Proration
+      prorateEnabled:    document.getElementById('prorate-enabled').checked,
+      prorateStartDate:  document.getElementById('prorate-start-date').value,
+      prorateCutoffDate: document.getElementById('prorate-cutoff-date').value,
+      // Eligibility
+      eligibilityCutoffEnabled: document.getElementById('excl-recent').checked,
+      eligibilityCutoffDays:    parseInt(document.getElementById('eligibility-cutoff-days').value) || 0,
+      excludePIP:               document.getElementById('excl-pip').checked,
+      excludePromoted:          document.getElementById('excl-promoted').checked,
+      excludePromotedMonths:    parseInt(document.getElementById('excl-promoted-months').value) || 6,
+      excludePartTime:          document.getElementById('excl-parttime').checked,
+      // Approval
+      approvalLevel: document.getElementById('approval-level').value,
     };
-    nextCycle.budgetTotal = nextCycle.totalPayroll * (nextCycle.budgetPct / 100);
+
     Store.setCycle(nextCycle);
 
     const currentFinance = Store.getFinanceModule();
@@ -302,8 +471,8 @@
     });
 
     Store.setFinanceModule({
-      defaultMeritPct: Number(document.getElementById('finance-default-merit').value) || 0,
-      defaultBonusPct: Number(document.getElementById('finance-default-bonus').value) || 0,
+      defaultMeritPct: parseFloat(document.getElementById('finance-default-merit').value) || 0,
+      defaultBonusPct: parseFloat(document.getElementById('finance-default-bonus').value) || 0,
       departments,
     });
 
