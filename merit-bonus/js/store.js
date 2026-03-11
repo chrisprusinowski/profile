@@ -12,17 +12,32 @@ const Store = (() => {
   }
 
   const DEFAULT_CYCLE = {
-    name:         '2025 Annual Merit Cycle',
-    type:         'merit',
-    openDate:     '2025-03-01',
-    closeDate:    '2025-04-15',
-    effectiveDate:'2025-07-01',
-    totalPayroll: 40000000,
-    budgetPct:    3.5,
-    budgetTotal:  1400000,
-    guidelineMin: 0,
-    guidelineMax: 10,
-    status:       'open',
+    name:                   '2025 Annual Merit Cycle',
+    type:                   'merit',
+    openDate:               '2025-03-01',
+    closeDate:              '2025-04-15',
+    effectiveDate:          '2025-07-01',
+    totalPayroll:           40000000,
+    budgetPct:              3.5,
+    budgetTotal:            1400000,
+    bonusBudgetPct:         8,
+    bonusBudgetTotal:       3200000,
+    guidelineMin:           0,
+    guidelineMax:           10,
+    status:                 'open',
+    // Proration
+    prorateEnabled:         true,
+    prorateStartDate:       '2025-01-01',
+    prorateCutoffDate:      '',
+    // Eligibility
+    eligibilityCutoffEnabled: true,
+    eligibilityCutoffDays:  90,
+    excludePIP:             true,
+    excludePromoted:        false,
+    excludePromotedMonths:  6,
+    excludePartTime:        false,
+    // Approval
+    approvalLevel:          'hr+finance',
   };
 
   const DEFAULT_FINANCE_MODULE = {
@@ -90,9 +105,54 @@ const Store = (() => {
     setCurrentUser(id) { localStorage.setItem('mc_activeUserId', id); },
 
     // ── Cycle config ────────────────────────────────────────────
-    getCycle()        { return get('cycle') || { ...DEFAULT_CYCLE }; },
-    setCycle(obj)     { set('cycle', obj); },
+    getCycle()    { return { ...DEFAULT_CYCLE, ...(get('cycle') || {}) }; },
+    setCycle(obj) { set('cycle', obj); },
 
+    // ── Proration ───────────────────────────────────────────────
+    // Returns { eligible: bool, factor: 0-1, reason: string }
+    getEmployeeProration(employee) {
+      const cycle = this.getCycle();
+      if (!employee || !employee.hireDate) {
+        return { eligible: true, factor: 1, reason: 'No hire date' };
+      }
+
+      const hireDate      = new Date(employee.hireDate);
+      const effectiveDate = new Date(cycle.effectiveDate || cycle.closeDate);
+
+      // Hard cutoff: hired on or after prorateCutoffDate → ineligible
+      if (cycle.prorateCutoffDate) {
+        const cutoff = new Date(cycle.prorateCutoffDate);
+        if (hireDate >= cutoff) {
+          return { eligible: false, factor: 0, reason: 'Hired after eligibility cutoff date' };
+        }
+      }
+
+      // Eligibility cutoff: hired within X days of effective date → ineligible
+      if (cycle.eligibilityCutoffEnabled && cycle.eligibilityCutoffDays > 0) {
+        const cutoffMs = cycle.eligibilityCutoffDays * 24 * 60 * 60 * 1000;
+        if (effectiveDate - hireDate < cutoffMs) {
+          return { eligible: false, factor: 0, reason: `Hired within ${cycle.eligibilityCutoffDays} days of effective date` };
+        }
+      }
+
+      // Proration disabled → full amount
+      if (!cycle.prorateEnabled) {
+        return { eligible: true, factor: 1, reason: 'No proration applied' };
+      }
+
+      // Hired before proration start → full year
+      const prorateStart = new Date(cycle.prorateStartDate || '2025-01-01');
+      if (hireDate <= prorateStart) {
+        return { eligible: true, factor: 1, reason: 'Full year' };
+      }
+
+      // Prorated: fraction of period from prorateStart to effectiveDate
+      const totalMs    = effectiveDate - prorateStart;
+      const employedMs = effectiveDate - hireDate;
+      if (totalMs <= 0) return { eligible: true, factor: 1, reason: 'Full year' };
+      const factor = Math.max(0, Math.min(1, employedMs / totalMs));
+      return { eligible: true, factor, reason: `${Math.round(factor * 100)}% prorated` };
+    },
 
     // ── Finance module (team makeup based budgets) ─────────────
     getFinanceModule() {
@@ -226,28 +286,38 @@ const Store = (() => {
       const recs      = get('recommendations') || {};
       const planning  = this.getPlanningSummary();
       const budget    = planning.cycleBudget.budgetTotal;
-      let allocated = 0, sumPct = 0;
+      let allocated = 0, sumPct = 0, eligibleCount = 0;
 
       employees.forEach(e => {
-        const pct  = (recs[e.id]?.meritPct) || 0;
-        allocated += e.salary * (pct / 100);
-        sumPct    += pct;
+        const proration = this.getEmployeeProration(e);
+        const pct       = (recs[e.id]?.meritPct) || 0;
+        if (proration.eligible) {
+          const effectivePct = pct * proration.factor;
+          allocated  += e.salary * (effectivePct / 100);
+          sumPct     += effectivePct;
+          eligibleCount++;
+        }
+        // Ineligible employees contribute $0 to the budget
       });
 
+      const cycle = this.getCycle();
       return {
         budget,
         allocated,
         remaining: budget - allocated,
-        avgPct:    employees.length ? sumPct / employees.length : 0,
+        avgPct:    eligibleCount ? sumPct / eligibleCount : 0,
         pctUsed:   budget ? allocated / budget : 0,
+        prorateEnabled: cycle.prorateEnabled,
       };
     },
 
     getStatusCounts() {
       const employees = get('employees') || [];
       const recs      = get('recommendations') || {};
-      const counts    = { Draft: 0, Submitted: 0, Approved: 0, Flagged: 0 };
+      const counts    = { Draft: 0, Submitted: 0, Approved: 0, Flagged: 0, Ineligible: 0 };
       employees.forEach(e => {
+        const proration = this.getEmployeeProration(e);
+        if (!proration.eligible) { counts.Ineligible++; return; }
         const s = (recs[e.id]?.status) || 'Draft';
         counts[s] = (counts[s] || 0) + 1;
       });

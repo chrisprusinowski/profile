@@ -106,6 +106,7 @@
           <option>Submitted</option>
           <option>Approved</option>
           <option>Flagged</option>
+          <option>Ineligible</option>
         </select>
         <div style="margin-left:auto; font-size:13px; color:var(--gray-500);" id="row-count"></div>
       </div>
@@ -120,6 +121,7 @@
               <th class="numeric">Current Salary</th>
               <th class="numeric">Merit %</th>
               <th class="numeric">Proposed Salary</th>
+              <th class="numeric" id="prorate-col-header">Proration</th>
               <th>Performance</th>
               <th>Notes</th>
               <th>Status</th>
@@ -144,17 +146,21 @@
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
+      <div id="modal-ineligible-banner" class="alert alert-amber" style="display:none; margin-bottom:16px;">
+        <div class="alert-icon">⚠</div>
+        <div id="modal-ineligible-reason">This employee is ineligible for merit or bonus this cycle.</div>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Current Salary</label>
           <input class="form-input" id="modal-salary" readonly style="background:var(--gray-50); color:var(--gray-600);" />
         </div>
         <div class="form-group">
-          <label class="form-label">Proposed Salary</label>
+          <label class="form-label">Proposed Salary <span id="modal-proposed-label" style="font-weight:400; color:var(--gray-500); font-size:12px;"></span></label>
           <input class="form-input" id="modal-proposed" readonly style="background:var(--green-50); color:var(--green-700); font-weight:700;" />
         </div>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="modal-pct-group">
         <label class="form-label">Merit Increase %</label>
         <input class="form-input" id="modal-pct" type="number" step="0.1" min="0" max="25"
           oninput="updateModalProposed()" style="font-size:16px; font-weight:700;" />
@@ -180,7 +186,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveModal()">Save &amp; Submit</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="saveModal()">Save &amp; Submit</button>
     </div>
   </div>
 </div>
@@ -200,7 +206,13 @@ let editingId     = null;
 function fmt(n) { return '$' + Math.round(n).toLocaleString(); }
 
 function statusBadge(s) {
-  const cls = { Draft:'badge-gray', Submitted:'badge-blue', Approved:'badge-green', Flagged:'badge-amber' };
+  const cls = {
+    Draft:       'badge-gray',
+    Submitted:   'badge-blue',
+    Approved:    'badge-green',
+    Flagged:     'badge-amber',
+    Ineligible:  'badge-gray',
+  };
   return `<span class="badge ${cls[s] || 'badge-gray'}">${s}</span>`;
 }
 
@@ -210,7 +222,19 @@ function ratingBadge(r) {
   return `<span class="badge ${cls[r] || 'badge-gray'}" style="font-size:11px">${r}</span>`;
 }
 
-function deriveStatus(currentStatus, meritPct, guidelineMax, editedOrSaved = false) {
+function prorationBadge(proration) {
+  if (!proration.eligible) {
+    return `<span class="badge badge-gray" title="${proration.reason}">Ineligible</span>`;
+  }
+  if (proration.factor >= 1) {
+    return `<span style="color:var(--green-700); font-size:13px; font-weight:600;">100%</span>`;
+  }
+  const pct = Math.round(proration.factor * 100);
+  return `<span class="badge badge-amber" title="${proration.reason}">${pct}%</span>`;
+}
+
+function deriveStatus(currentStatus, meritPct, guidelineMax, editedOrSaved = false, eligible = true) {
+  if (!eligible) return 'Ineligible';
   if (meritPct > guidelineMax) return 'Flagged';
   if (currentStatus === 'Approved') return 'Approved';
   if (editedOrSaved) return 'Submitted';
@@ -238,12 +262,18 @@ function renderTable() {
   const recs         = Store.getRecommendations();
   const cycle        = Store.getCycle();
   const guidelineMax = cycle.guidelineMax || 10;
+  const showProrate  = cycle.prorateEnabled || cycle.prorateCutoffDate || cycle.eligibilityCutoffEnabled;
+
+  // Show/hide proration column header
+  const prorateHeader = document.getElementById('prorate-col-header');
+  if (prorateHeader) prorateHeader.style.display = showProrate ? '' : 'none';
 
   // Apply filters
   const filtered = employees.filter(e => {
-    const rec    = recs[e.id] || {};
-    const status = rec.status || 'Draft';
-    const search = activeFilters.search;
+    const rec        = recs[e.id] || {};
+    const proration  = Store.getEmployeeProration(e);
+    const status     = !proration.eligible ? 'Ineligible' : (rec.status || 'Draft');
+    const search     = activeFilters.search;
 
     const matchSearch = !search
       || e.name.toLowerCase().includes(search)
@@ -258,16 +288,27 @@ function renderTable() {
   tbody.innerHTML = '';
 
   filtered.forEach((e, i) => {
-    const rec      = recs[e.id] || { meritPct: 0, rating: 'Meets Expectations', notes: '', status: 'Draft' };
-    const pct      = rec.meritPct || 0;
-    const status   = rec.status || 'Draft';
-    const proposed = e.salary * (1 + pct / 100);
-    const flagged  = pct > guidelineMax;
-    const color    = e.avatarColor || COLORS[i % COLORS.length];
-    const locked   = status === 'Approved';
+    const rec        = recs[e.id] || { meritPct: 0, rating: 'Meets Expectations', notes: '', status: 'Draft' };
+    const proration  = Store.getEmployeeProration(e);
+    const pct        = rec.meritPct || 0;
+    const status     = !proration.eligible ? 'Ineligible' : (rec.status || 'Draft');
+    const flagged    = proration.eligible && pct > guidelineMax;
+    const color      = e.avatarColor || COLORS[i % COLORS.length];
+    const locked     = status === 'Approved' || !proration.eligible;
+
+    // Proposed salary: if ineligible show current salary, if prorated show prorated result
+    const rawIncrease     = e.salary * (pct / 100);
+    const proratedIncrease = proration.eligible ? rawIncrease * proration.factor : 0;
+    const proposedSalary  = e.salary + proratedIncrease;
+
+    const prorateCell = showProrate
+      ? `<td class="numeric">${prorationBadge(proration)}</td>`
+      : '';
 
     const tr = document.createElement('tr');
-    if (flagged) tr.style.background = 'var(--amber-50)';
+    if (!proration.eligible) tr.style.opacity = '0.55';
+    else if (flagged) tr.style.background = 'var(--amber-50)';
+
     tr.innerHTML = `
       <td>
         <div class="employee-cell">
@@ -288,7 +329,8 @@ function renderTable() {
         <span style="font-size:12px; color:var(--gray-400); margin-left:2px;">%</span>
         ${flagged ? `<span title="Exceeds ${guidelineMax}% guideline" style="color:var(--amber-600); margin-left:4px;">⚠</span>` : ''}
       </td>
-      <td class="numeric fw-700">${fmt(proposed)}</td>
+      <td class="numeric fw-700">${proration.eligible ? fmt(proposedSalary) : '<span style="color:var(--gray-400)">—</span>'}</td>
+      ${prorateCell}
       <td>${ratingBadge(rec.rating || 'Meets Expectations')}</td>
       <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
                  color:var(--gray-500); font-size:12.5px;">
@@ -331,7 +373,9 @@ function updatePct(id, val) {
   const cycle        = Store.getCycle();
   const guidelineMax = cycle.guidelineMax || 10;
   const current      = Store.getRecommendation(id);
-  const newStatus    = deriveStatus(current.status || 'Draft', pct, guidelineMax, true);
+  const employee     = Store.getVisibleEmployees().find(e => e.id === id);
+  const proration    = employee ? Store.getEmployeeProration(employee) : { eligible: true };
+  const newStatus    = deriveStatus(current.status || 'Draft', pct, guidelineMax, true, proration.eligible);
 
   Store.setRecommendation(id, { meritPct: pct, status: newStatus });
   renderTable();
@@ -343,22 +387,54 @@ function filterDept(val)   { activeFilters.dept   = val;               renderTab
 function filterStatus(val) { activeFilters.status = val;               renderTable(); }
 
 // ── Modal ─────────────────────────────────────────────────────
-let _modalSalary = 0;
+let _modalSalary    = 0;
+let _modalProration = { eligible: true, factor: 1, reason: '' };
 
 function openModal(id) {
   editingId = id;
   const employees = Store.getVisibleEmployees();
   const e         = employees.find(x => x.id === id);
   if (!e) return;
-  const rec = Store.getRecommendation(id);
+  const rec       = Store.getRecommendation(id);
+  const proration = Store.getEmployeeProration(e);
 
-  _modalSalary = e.salary;
-  document.getElementById('modal-name').textContent        = e.name;
-  document.getElementById('modal-title-dept').textContent  = [e.title, e.department].filter(Boolean).join(' · ');
-  document.getElementById('modal-salary').value            = fmt(e.salary);
-  document.getElementById('modal-pct').value               = rec.meritPct || 0;
-  document.getElementById('modal-rating').value            = rec.rating || 'Meets Expectations';
-  document.getElementById('modal-notes').value             = rec.notes || '';
+  _modalSalary    = e.salary;
+  _modalProration = proration;
+
+  document.getElementById('modal-name').textContent       = e.name;
+  document.getElementById('modal-title-dept').textContent = [e.title, e.department].filter(Boolean).join(' · ');
+  document.getElementById('modal-salary').value           = fmt(e.salary);
+  document.getElementById('modal-pct').value              = rec.meritPct || 0;
+  document.getElementById('modal-rating').value           = rec.rating || 'Meets Expectations';
+  document.getElementById('modal-notes').value            = rec.notes || '';
+
+  // Ineligible banner
+  const ineligibleBanner = document.getElementById('modal-ineligible-banner');
+  const saveBtn          = document.getElementById('modal-save-btn');
+  const pctGroup         = document.getElementById('modal-pct-group');
+  if (!proration.eligible) {
+    ineligibleBanner.style.display = '';
+    document.getElementById('modal-ineligible-reason').textContent =
+      `This employee is ineligible for merit or bonus this cycle: ${proration.reason}.`;
+    document.getElementById('modal-pct').disabled = true;
+    saveBtn.disabled = true;
+    saveBtn.style.opacity = '0.5';
+    pctGroup.style.opacity = '0.4';
+  } else {
+    ineligibleBanner.style.display = 'none';
+    document.getElementById('modal-pct').disabled = false;
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '';
+    pctGroup.style.opacity = '';
+  }
+
+  // Proration label
+  const proposedLabel = document.getElementById('modal-proposed-label');
+  if (proration.eligible && proration.factor < 1) {
+    proposedLabel.textContent = `(prorated at ${Math.round(proration.factor * 100)}%)`;
+  } else {
+    proposedLabel.textContent = '';
+  }
 
   const cycle = Store.getCycle();
   document.getElementById('modal-guideline-pct').textContent = (cycle.guidelineMax || 10) + '%';
@@ -368,23 +444,39 @@ function openModal(id) {
 }
 
 function updateModalProposed() {
-  const pct      = parseFloat(document.getElementById('modal-pct').value) || 0;
-  const proposed = _modalSalary * (1 + pct / 100);
-  document.getElementById('modal-proposed').value = fmt(proposed);
+  const pct            = parseFloat(document.getElementById('modal-pct').value) || 0;
+  const rawIncrease    = _modalSalary * (pct / 100);
+  const proratedIncrease = _modalProration.eligible ? rawIncrease * _modalProration.factor : 0;
+  const proposed       = _modalSalary + proratedIncrease;
+
+  document.getElementById('modal-proposed').value = _modalProration.eligible ? fmt(proposed) : fmt(_modalSalary);
 
   const cycle        = Store.getCycle();
   const guidelineMax = cycle.guidelineMax || 10;
   const flagEl       = document.getElementById('modal-flag-warning');
   const hintEl       = document.getElementById('modal-pct-hint');
 
+  if (!_modalProration.eligible) {
+    flagEl.style.display = 'none';
+    hintEl.textContent   = '';
+    return;
+  }
+
   if (pct > guidelineMax) {
     flagEl.style.display = '';
-    hintEl.textContent   = `+${fmt(proposed - _modalSalary)} increase`;
+    hintEl.textContent   = `+${fmt(proratedIncrease)} prorated increase`;
     hintEl.style.color   = 'var(--amber-600)';
   } else {
     flagEl.style.display = 'none';
-    hintEl.textContent   = pct > 0 ? `+${fmt(proposed - _modalSalary)} increase` : '';
-    hintEl.style.color   = 'var(--green-600)';
+    if (pct > 0) {
+      const suffix = _modalProration.factor < 1
+        ? ` (${Math.round(_modalProration.factor * 100)}% prorated from ${fmt(rawIncrease)} full-year increase)`
+        : '';
+      hintEl.textContent = `+${fmt(proratedIncrease)} increase${suffix}`;
+    } else {
+      hintEl.textContent = '';
+    }
+    hintEl.style.color = 'var(--green-600)';
   }
 }
 
@@ -402,7 +494,7 @@ function saveModal() {
   const cycle        = Store.getCycle();
   const guidelineMax = cycle.guidelineMax || 10;
   const current      = Store.getRecommendation(editingId);
-  const newStatus    = deriveStatus(current.status || 'Draft', clamped, guidelineMax, true);
+  const newStatus    = deriveStatus(current.status || 'Draft', clamped, guidelineMax, true, _modalProration.eligible);
 
   Store.setRecommendation(editingId, { meritPct: clamped, rating, notes, status: newStatus });
 
@@ -426,19 +518,30 @@ function exportCSV() {
   const employees = Store.getVisibleEmployees();
   if (!employees.length) { showToast('No data to export'); return; }
 
-  const recs = Store.getRecommendations();
-  const rows = [
+  const recs  = Store.getRecommendations();
+  const cycle = Store.getCycle();
+  const rows  = [
     ['Name','Department','Job Title','Current Salary','Merit %',
-     'Proposed Salary','Performance Rating','Notes','Status'],
+     'Proration Factor','Prorated Increase','Proposed Salary',
+     'Eligibility','Performance Rating','Notes','Status'],
   ];
 
   employees.forEach(e => {
-    const rec  = recs[e.id] || {};
-    const pct  = rec.meritPct || 0;
+    const rec       = recs[e.id] || {};
+    const pct       = rec.meritPct || 0;
+    const proration = Store.getEmployeeProration(e);
+    const rawIncrease      = e.salary * (pct / 100);
+    const proratedIncrease = proration.eligible ? rawIncrease * proration.factor : 0;
+    const proposed         = e.salary + proratedIncrease;
     rows.push([
       e.name, e.department || '', e.title || '',
-      e.salary, pct.toFixed(1), Math.round(e.salary * (1 + pct / 100)),
-      rec.rating || 'Meets Expectations', rec.notes || '', rec.status || 'Draft',
+      e.salary, pct.toFixed(1),
+      proration.eligible ? proration.factor.toFixed(4) : '0',
+      Math.round(proratedIncrease),
+      Math.round(proposed),
+      proration.eligible ? 'Eligible' : `Ineligible (${proration.reason})`,
+      rec.rating || 'Meets Expectations', rec.notes || '',
+      proration.eligible ? (rec.status || 'Draft') : 'Ineligible',
     ]);
   });
 
@@ -463,19 +566,15 @@ function showToast(msg) {
 
 // ── Init ──────────────────────────────────────────────────────
 (function init() {
-  // Role
   RoleUI.init();
 
-  // Cycle name
   const cycle = Store.getCycle();
   document.getElementById('sb-cycle-name').textContent = cycle.name || '2025 Annual Merit Cycle';
 
-  // Flagged badge
   const flagged = Store.getFlaggedCount();
   const badge   = document.getElementById('flagged-badge');
   if (flagged > 0) { badge.style.display = ''; badge.textContent = flagged; }
 
-  // Populate dept filter from real imported departments
   const depts  = Store.getDepartments();
   const select = document.getElementById('dept-filter');
   depts.forEach(d => {
@@ -484,7 +583,6 @@ function showToast(msg) {
     select.appendChild(opt);
   });
 
-  // Modal close on overlay click
   document.getElementById('detail-modal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
   });
