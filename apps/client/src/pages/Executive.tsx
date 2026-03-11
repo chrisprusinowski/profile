@@ -1,5 +1,6 @@
 import type { Employee, Cycle, RecommendationMap } from '../types.js';
 import { fmt, fmtK, getEligibility } from '../utils.js';
+import { buildBudgetSnapshot } from '../comp.js';
 
 interface Props {
   employees: Employee[];
@@ -13,11 +14,9 @@ export function Executive({ employees, cycle, recommendations }: Props) {
 
   // ── Status counts ──────────────────────────────────────────
   const statusCounts = { Draft: 0, Submitted: 0, Locked: 0 };
-  let eligiblePayroll = 0;
-  let allocated = 0;
-  let bonusAllocated = 0;
-  let sumPct = 0;
-  let eligibleCount = 0;
+  const snapshot = buildBudgetSnapshot(employees, cycle, recommendations);
+  const allocated = snapshot.meritAllocated;
+  const bonusAllocated = snapshot.bonusAllocated;
   let flaggedDollar = 0;
   const performanceDistribution: Record<string, number> = {
     '1': 0,
@@ -33,16 +32,8 @@ export function Executive({ employees, cycle, recommendations }: Props) {
     const useOverride =
       eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
     const budgetBase = useOverride ? e.salary : eligibleBase;
-    if (budgetBase > 0) eligibleCount += 1;
-    eligiblePayroll += budgetBase;
     const pct = rec?.meritPct ?? 0;
     const inc = budgetBase * (pct / 100);
-    allocated += inc;
-    bonusAllocated +=
-      rec?.bonusPayoutAmount && rec?.bonusPayoutAmount > 0
-        ? rec.bonusPayoutAmount
-        : budgetBase * ((rec?.bonusPayoutPercent ?? 0) / 100);
-    sumPct += pct;
     const ratingKey = rec?.performanceRating
       ? String(rec.performanceRating)
       : 'Unrated';
@@ -53,11 +44,9 @@ export function Executive({ employees, cycle, recommendations }: Props) {
     if (pct > guidelineMax) flaggedDollar += inc;
   }
 
-  const budgetTotal = cycle?.budgetTotal
-    ? Number(cycle.budgetTotal)
-    : eligiblePayroll * (meritBudgetPct / 100);
-  const avgPct = eligibleCount ? sumPct / eligibleCount : 0;
-  const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
+  const budgetTotal = snapshot.meritBudgetTotal;
+  const avgPct = snapshot.avgMeritPct;
+  const pctUsed = snapshot.pctUsed;
   const submitted = statusCounts.Submitted + statusCounts.Locked;
   const guidelineFlagged = employees.filter((e) => (recommendations[e.id]?.meritPct ?? 0) > guidelineMax).length;
 
@@ -180,7 +169,7 @@ export function Executive({ employees, cycle, recommendations }: Props) {
             <div className="metric-label">Total Budget</div>
             <div className="metric-value">{fmtK(budgetTotal)}</div>
             <div className="metric-sub">
-              {meritBudgetPct.toFixed(2)}% of eligible payroll
+              {meritBudgetPct.toFixed(2)}% of payroll basis
             </div>
           </div>
           <div className="metric-card">
@@ -188,7 +177,7 @@ export function Executive({ employees, cycle, recommendations }: Props) {
             <div className="metric-label">Merit Allocated</div>
             <div className="metric-value">{fmtK(allocated)}</div>
             <div className="metric-sub">
-              {Math.round(pctUsed * 100)}% of budget
+              {(pctUsed * 100).toFixed(2)}% of budget
             </div>
           </div>
           <div className="metric-card">

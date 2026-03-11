@@ -12,6 +12,17 @@ import { pool } from '../db.js';
 
 export const recommendationsRouter = Router();
 
+function dateFromIso(value: string): Date | null {
+  if (!value) return null;
+  const d = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function roundTo(value: number, decimals = 2) {
+  const p = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * p) / p;
+}
+
 const recommendationPayloadSchema = z.object({
   meritPct: z.coerce.number().finite().min(0).max(25).optional(),
   meritAmount: z.coerce.number().finite().min(0).optional(),
@@ -62,11 +73,11 @@ function calculateEligibilityPercent(
   cycle: NonNullable<Awaited<ReturnType<typeof getCurrentCycle>>>
 ) {
   if (!hireDateRaw) return 1;
-  const hireDate = new Date(hireDateRaw);
-  if (Number.isNaN(hireDate.getTime())) return 1;
+  const hireDate = dateFromIso(hireDateRaw);
+  if (!hireDate) return 1;
 
   const asOfDate = cycle.effective_date
-    ? new Date(cycle.effective_date)
+    ? dateFromIso(cycle.effective_date) ?? new Date()
     : new Date();
   const minTenureDays = Number(cycle.min_tenure_days ?? 0);
   const tenureDays = Math.floor(
@@ -77,14 +88,9 @@ function calculateEligibilityPercent(
   if (!cycle.enable_proration) return 1;
   if (!cycle.proration_start_date || !cycle.eligibility_cutoff_date) return 1;
 
-  const prorationStart = new Date(cycle.proration_start_date);
-  const cutoff = new Date(cycle.eligibility_cutoff_date);
-  if (
-    Number.isNaN(prorationStart.getTime()) ||
-    Number.isNaN(cutoff.getTime()) ||
-    prorationStart >= cutoff
-  )
-    return 1;
+  const prorationStart = dateFromIso(cycle.proration_start_date);
+  const cutoff = dateFromIso(cycle.eligibility_cutoff_date);
+  if (!prorationStart || !cutoff || prorationStart >= cutoff) return 1;
 
   if (hireDate < prorationStart) return 1;
   if (hireDate >= cutoff) return 0;
@@ -232,7 +238,7 @@ recommendationsRouter.put(
         return;
       }
 
-      const meritPct = parsed.data.meritPct ?? existing.rows[0]?.merit_pct ?? 0;
+      const meritPct = roundTo(parsed.data.meritPct ?? existing.rows[0]?.merit_pct ?? 0);
       const eligibilityPercent = calculateEligibilityPercent(
         employeeResult.rows[0].hire_date ?? null,
         cycle
@@ -252,26 +258,29 @@ recommendationsRouter.put(
         (ineligible && cycle.allow_eligibility_override
           ? 1
           : eligibilityPercent);
-      const meritAmount =
+      const meritAmount = roundTo(
         parsed.data.meritAmount ??
-        eligibleSalaryBase * (Number(meritPct) / 100);
+        eligibleSalaryBase * (Number(meritPct) / 100)
+      );
       const performanceRating =
         parsed.data.performanceRating ??
         existing.rows[0]?.performance_rating ??
         2;
       const notes = parsed.data.notes ?? existing.rows[0]?.notes ?? '';
       const bonusTargetPercent =
-        parsed.data.bonusTargetPercent ??
-        existing.rows[0]?.bonus_target_percent ??
-        null;
-      const bonusPayoutPercent =
+        parsed.data.bonusTargetPercent == null
+          ? (existing.rows[0]?.bonus_target_percent ?? null)
+          : roundTo(parsed.data.bonusTargetPercent);
+      const bonusPayoutPercent = roundTo(
         parsed.data.bonusPayoutPercent ??
         existing.rows[0]?.bonus_payout_percent ??
-        0;
-      const bonusPayoutAmount =
+        0
+      );
+      const bonusPayoutAmount = roundTo(
         parsed.data.bonusPayoutAmount ??
         existing.rows[0]?.bonus_payout_amount ??
-        0;
+        0
+      );
 
       const result = await pool.query(
         `INSERT INTO merit_recommendations (cycle_id, employee_id, merit_pct, merit_amount, performance_rating, notes, status, bonus_target_percent, bonus_payout_percent, bonus_payout_amount, updated_by)
