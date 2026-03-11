@@ -10,13 +10,16 @@ export const cycleRouter = Router();
 const twoDecimalNumber = (min: number, max?: number) => {
   const schema = z.coerce.number().finite().min(min);
   const bounded = max == null ? schema : schema.max(max);
-  return bounded.refine((value) => Number.isInteger(value * 100), {
+  return bounded.refine((value) => {
+    const scaled = value * 100;
+    return Math.abs(scaled - Math.round(scaled)) < 1e-8;
+  }, {
     message: 'Must have at most 2 decimal places'
   });
 };
 
 function roundTo(value: number, decimals = 2) {
-  const p = 10 ** decimals;
+  const p = 10 ** decimalsÍ;
   return Math.round((value + Number.EPSILON) * p) / p;
 }
 
