@@ -1,5 +1,5 @@
 import type { Employee, Cycle, RecommendationMap } from '../types.js';
-import { fmt, fmtK } from '../utils.js';
+import { fmt, fmtK, getEligibility } from '../utils.js';
 
 interface Props {
   employees: Employee[];
@@ -8,17 +8,16 @@ interface Props {
 }
 
 export function Executive({ employees, cycle, recommendations }: Props) {
-  const guidelineMax = cycle?.guidelineMax ?? 10;
-  const totalActualPayroll = employees.reduce((s, e) => s + e.salary, 0);
-  const budgetTotal = cycle?.budgetTotal
-    ? Number(cycle.budgetTotal)
-    : totalActualPayroll * ((cycle?.budgetPct ?? 3.5) / 100);
+  const guidelineMax = cycle?.guidelineMaxPercent ?? cycle?.guidelineMax ?? 10;
+  const meritBudgetPct = cycle?.meritBudgetPercent ?? cycle?.budgetPct ?? 3.5;
 
   // ── Status counts ──────────────────────────────────────────
   const statusCounts = { Draft: 0, Submitted: 0, Locked: 0 };
+  let eligiblePayroll = 0;
   let allocated = 0;
   let bonusAllocated = 0;
   let sumPct = 0;
+  let eligibleCount = 0;
   let flaggedDollar = 0;
   const performanceDistribution: Record<string, number> = {
     '1': 0,
@@ -29,10 +28,20 @@ export function Executive({ employees, cycle, recommendations }: Props) {
 
   for (const e of employees) {
     const rec = recommendations[e.id];
+    const eligibility = getEligibility(e.hireDate, cycle);
+    const eligibleBase = e.salary * eligibility.eligibilityPercent;
+    const useOverride =
+      eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
+    const budgetBase = useOverride ? e.salary : eligibleBase;
+    if (budgetBase > 0) eligibleCount += 1;
+    eligiblePayroll += budgetBase;
     const pct = rec?.meritPct ?? 0;
-    const inc = e.salary * (pct / 100);
+    const inc = budgetBase * (pct / 100);
     allocated += inc;
-    bonusAllocated += rec?.bonusPayoutAmount ?? 0;
+    bonusAllocated +=
+      rec?.bonusPayoutAmount && rec?.bonusPayoutAmount > 0
+        ? rec.bonusPayoutAmount
+        : budgetBase * ((rec?.bonusPayoutPercent ?? 0) / 100);
     sumPct += pct;
     const ratingKey = rec?.performanceRating
       ? String(rec.performanceRating)
@@ -44,7 +53,10 @@ export function Executive({ employees, cycle, recommendations }: Props) {
     if (pct > guidelineMax) flaggedDollar += inc;
   }
 
-  const avgPct = employees.length ? sumPct / employees.length : 0;
+  const budgetTotal = cycle?.budgetTotal
+    ? Number(cycle.budgetTotal)
+    : eligiblePayroll * (meritBudgetPct / 100);
+  const avgPct = eligibleCount ? sumPct / eligibleCount : 0;
   const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
   const submitted = statusCounts.Submitted + statusCounts.Locked;
   const guidelineFlagged = employees.filter((e) => (recommendations[e.id]?.meritPct ?? 0) > guidelineMax).length;
@@ -77,11 +89,16 @@ export function Executive({ employees, cycle, recommendations }: Props) {
       headcount: 0,
       submitted: 0
     };
-    deptMap[d].payroll += e.salary;
+    const eligibility = getEligibility(e.hireDate, cycle);
+    const eligibleBase = e.salary * eligibility.eligibilityPercent;
+    const useOverride =
+      eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
+    const budgetBase = useOverride ? e.salary : eligibleBase;
+    deptMap[d].payroll += budgetBase;
     deptMap[d].headcount += 1;
     const rec = recommendations[e.id];
     const pct = rec?.meritPct ?? 0;
-    deptMap[d].allocated += e.salary * (pct / 100);
+    deptMap[d].allocated += budgetBase * (pct / 100);
     if (rec && rec.status !== 'Draft') deptMap[d].submitted += 1;
   }
 
@@ -163,7 +180,7 @@ export function Executive({ employees, cycle, recommendations }: Props) {
             <div className="metric-label">Total Budget</div>
             <div className="metric-value">{fmtK(budgetTotal)}</div>
             <div className="metric-sub">
-              {(cycle?.budgetPct ?? 3.5).toFixed(1)}% of payroll
+              {meritBudgetPct.toFixed(2)}% of eligible payroll
             </div>
           </div>
           <div className="metric-card">

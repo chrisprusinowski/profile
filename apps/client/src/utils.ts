@@ -127,6 +127,6 @@ export function getEligibility(
   return {
     eligibilityPercent: pct,
     ineligible: pct <= 0,
-    label: `${(pct * 100).toFixed(0)}%`
+    label: `${(pct * 100).toFixed(1)}%`
   };
 }

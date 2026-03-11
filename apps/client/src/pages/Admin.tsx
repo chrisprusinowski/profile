@@ -299,6 +299,13 @@ export function Admin({
                     <option value="closed">closed</option>
                     <option value="locked">locked</option>
                   </select>
+                  <div className="form-hint">
+                    {form.status === 'open'
+                      ? 'Managers can edit recommendations'
+                      : form.status === 'closed'
+                        ? 'No new edits allowed'
+                        : 'All recommendations locked'}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Minimum tenure days</label>
@@ -306,10 +313,42 @@ export function Admin({
                     className="form-input"
                     type="number"
                     min={0}
+                    step={1}
                     value={form.minTenureDays}
                     onChange={(e) =>
-                      update('minTenureDays', Number(e.target.value) || 0)
+                      update('minTenureDays', Math.max(0, Math.round(Number(e.target.value) || 0)))
                     }
+                  />
+                  <div className="form-hint">Employees with fewer days of tenure are ineligible</div>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Effective Date</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={form.effectiveDate || ''}
+                    onChange={(e) => update('effectiveDate', e.target.value)}
+                  />
+                  <div className="form-hint">Used for tenure and proration calculations</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Open Date</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={form.openDate || ''}
+                    onChange={(e) => update('openDate', e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Close Date</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={form.closeDate || ''}
+                    onChange={(e) => update('closeDate', e.target.value)}
                   />
                 </div>
               </div>
@@ -323,11 +362,16 @@ export function Admin({
                     type="number"
                     min={0}
                     max={100}
+                    step={0.01}
                     value={form.meritBudgetPercent}
                     onChange={(e) =>
-                      update('meritBudgetPercent', Number(e.target.value) || 0)
+                      update('meritBudgetPercent', parseFloat(e.target.value) || 0)
                     }
                   />
+                  <div className="form-hint">
+                    ≈ ${Math.round(totalPayroll * (form.meritBudgetPercent / 100)).toLocaleString()} of {' '}
+                    ${Math.round(totalPayroll).toLocaleString()} payroll
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Bonus Budget %</label>
@@ -336,11 +380,15 @@ export function Admin({
                     type="number"
                     min={0}
                     max={100}
+                    step={0.01}
                     value={form.bonusBudgetPercent}
                     onChange={(e) =>
-                      update('bonusBudgetPercent', Number(e.target.value) || 0)
+                      update('bonusBudgetPercent', parseFloat(e.target.value) || 0)
                     }
                   />
+                  <div className="form-hint">
+                    ≈ ${Math.round(totalPayroll * (form.bonusBudgetPercent / 100)).toLocaleString()} of payroll
+                  </div>
                 </div>
               </div>
               <h4 style={{ marginBottom: 10 }}>Guidelines</h4>
@@ -352,11 +400,13 @@ export function Admin({
                     type="number"
                     min={0}
                     max={100}
+                    step={0.01}
                     value={form.guidelineMaxPercent}
                     onChange={(e) =>
-                      update('guidelineMaxPercent', Number(e.target.value) || 0)
+                      update('guidelineMaxPercent', parseFloat(e.target.value) || 0)
                     }
                   />
+                  <div className="form-hint">Merit increases above this threshold are flagged for review</div>
                 </div>
                 <div className="form-group">
                   <label className="form-label">Allow override</label>
