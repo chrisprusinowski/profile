@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { readFile } from 'fs/promises';
 import { z } from 'zod';
-import { getManagerScopeName, requireRole, type AuthenticatedRequest } from '../auth.js';
+import {
+  getManagerScopeEmail,
+  getManagerScopeName,
+  requireRole,
+  type AuthenticatedRequest
+} from '../auth.js';
 import { pool } from '../db.js';
 import { findBestPayRange, type PayRangeRecord } from '../payRanges.js';
 import { logAuditEvent } from '../audit.js';
@@ -98,8 +103,12 @@ async function loadPayRanges(): Promise<PayRangeRecord[]> {
   return result.rows;
 }
 
-async function fetchEmployeesFromDb(managerScopeName: string | null, managerScopeEmail: string | null) {
-  const result = managerScopeName
+async function fetchEmployeesFromDb(
+  managerScopeName: string | null,
+  managerScopeEmail: string | null
+) {
+  const shouldScope = Boolean(managerScopeName || managerScopeEmail);
+  const result = shouldScope
     ? await pool.query(
       `SELECT id,
               name,
@@ -145,7 +154,8 @@ async function fetchEmployeesFromDb(managerScopeName: string | null, managerScop
 employeesRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const managerScopeName = getManagerScopeName(req.user!);
-    const managerScopeEmail = req.user?.email?.toLowerCase() ?? null;
+    const managerScopeEmail =
+      getManagerScopeEmail(req.user!) ?? req.user?.email?.toLowerCase() ?? null;
     const employees = await fetchEmployeesFromDb(managerScopeName, managerScopeEmail);
     res.json({ success: true, data: employees });
   } catch (error) {

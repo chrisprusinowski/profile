@@ -1,5 +1,5 @@
 import type { Employee, Cycle, RecommendationMap } from '../types.js';
-import { fmt, fmtK, avatarColor, initials, getEligibility } from '../utils.js';
+import { fmt, fmtK, avatarColor, initials } from '../utils.js';
 import { buildBudgetSnapshot } from '../comp.js';
 
 interface Props {
@@ -26,14 +26,6 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
 
   for (const e of employees) {
     const rec = recommendations[e.id];
-    const eligibility = getEligibility(e.hireDate, cycle);
-    const eligibleBase = e.salary * eligibility.eligibilityPercent;
-    const useOverride =
-      eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
-    const budgetBase = useOverride ? e.salary : eligibleBase;
-
-    const pct = rec?.meritPct ?? 0;
-
     const ratingKey = rec?.performanceRating
       ? String(rec.performanceRating)
       : 'Unrated';
