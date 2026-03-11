@@ -89,10 +89,37 @@ export function setDemoUserEmail(email: string) {
   localStorage.setItem(LS_DEMO_USER_EMAIL, email);
 }
 
+type ErrorBody = {
+  error?: string;
+  message?: string;
+  details?: {
+    formErrors?: string[];
+    fieldErrors?: Record<string, string[]>;
+  } | string;
+};
+
+function flattenValidationDetails(details: ErrorBody['details']): string | null {
+  if (!details) return null;
+  if (typeof details === 'string') return details;
+
+  const formErrors = details.formErrors?.filter(Boolean) ?? [];
+  const fieldErrors = Object.entries(details.fieldErrors ?? {})
+    .flatMap(([field, messages]) =>
+      (messages ?? []).filter(Boolean).map((message) => `${field}: ${message}`)
+    );
+
+  const merged = [...formErrors, ...fieldErrors];
+  return merged.length ? merged.join(' | ') : null;
+}
+
 async function parseError(res: Response, fallback: string): Promise<Error> {
   try {
-    const body = (await res.json()) as { error?: string; message?: string };
-    return new Error(body.message || body.error || fallback);
+    const body = (await res.json()) as ErrorBody;
+    const detailMessage = flattenValidationDetails(body.details);
+    const message = [body.message || body.error || fallback, detailMessage]
+      .filter(Boolean)
+      .join(' — ');
+    return new Error(message || fallback);
   } catch {
     return new Error(fallback);
   }
