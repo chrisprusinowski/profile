@@ -27,6 +27,15 @@ interface Props {
 
 const PERFORMANCE_RATINGS: Array<1 | 2 | 3> = [1, 2, 3];
 
+function parseNonNegativeInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
+
 export function Merit({
   employees,
   cycle,
@@ -445,11 +454,15 @@ export function Merit({
                         defaultValue={meritPct}
                         key={`${e.id}-m-${meritPct}`}
                         disabled={locked}
-                        onBlur={(ev) =>
-                          void saveForEmployee(e.id, {
-                            meritPct: parseFloat(ev.target.value) || 0
-                          })
-                        }
+                        onBlur={(ev) => {
+                          const value = parseNonNegativeInput(ev.target.value);
+                          if (value == null) {
+                            showToast('Merit % must be a non-negative number');
+                            ev.target.value = String(meritPct);
+                            return;
+                          }
+                          void saveForEmployee(e.id, { meritPct: value });
+                        }}
                       />
                     </td>
                     <td>
@@ -460,26 +473,34 @@ export function Merit({
                         defaultValue={rec?.bonusPayoutPercent ?? 0}
                         key={`${e.id}-bp-${rec?.bonusPayoutPercent ?? 0}`}
                         disabled={locked}
-                        onBlur={(ev) =>
-                          void saveForEmployee(e.id, {
-                            bonusPayoutPercent: parseFloat(ev.target.value) || 0
-                          })
-                        }
+                        onBlur={(ev) => {
+                          const value = parseNonNegativeInput(ev.target.value);
+                          if (value == null) {
+                            showToast('Bonus % must be a non-negative number');
+                            ev.target.value = String(rec?.bonusPayoutPercent ?? 0);
+                            return;
+                          }
+                          void saveForEmployee(e.id, { bonusPayoutPercent: value });
+                        }}
                       />
                     </td>
                     <td>
                       <input
                         className="merit-pct-input"
                         type="number"
-                        step="100"
+                        step="0.01"
                         defaultValue={rec?.bonusPayoutAmount ?? 0}
                         key={`${e.id}-ba-${rec?.bonusPayoutAmount ?? 0}`}
                         disabled={locked}
-                        onBlur={(ev) =>
-                          void saveForEmployee(e.id, {
-                            bonusPayoutAmount: parseFloat(ev.target.value) || 0
-                          })
-                        }
+                        onBlur={(ev) => {
+                          const value = parseNonNegativeInput(ev.target.value);
+                          if (value == null) {
+                            showToast('Bonus amount must be a non-negative number');
+                            ev.target.value = String(rec?.bonusPayoutAmount ?? 0);
+                            return;
+                          }
+                          void saveForEmployee(e.id, { bonusPayoutAmount: value });
+                        }}
                       />
                     </td>
                     <td>

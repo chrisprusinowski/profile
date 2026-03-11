@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getManagerScopeEmail, getManagerScopeName, requireRole, type AuthenticatedRequest } from '../auth.js';
+import { getEffectiveManagerScope, requireRole, type AuthenticatedRequest } from '../auth.js';
 import { pool } from '../db.js';
 
 export const exportsRouter = Router();
@@ -15,8 +15,7 @@ function csv(rows: Record<string, unknown>[]) {
 }
 
 async function scopedWhere(req: AuthenticatedRequest) {
-  const name = getManagerScopeName(req.user!);
-  const email = getManagerScopeEmail(req.user!);
+  const { managerName: name, managerEmail: email } = getEffectiveManagerScope(req.user!);
   if (req.user!.role !== 'manager') return { clause: '', params: [] as unknown[] };
   return { clause: 'WHERE lower(e.manager)=lower($1) OR lower(e.manager_email)=lower($2)', params: [name, email] };
 }
