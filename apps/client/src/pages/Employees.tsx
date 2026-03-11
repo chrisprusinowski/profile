@@ -62,6 +62,19 @@ function employeeToForm(employee: Employee): EmployeeFormState {
   };
 }
 
+
+function isIsoDate(value: string): boolean {
+  if (!value.trim()) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() + 1 === m &&
+    dt.getUTCDate() === d
+  );
+}
+
 export function Employees({ employees, showToast, refreshAll, readOnly = false }: Props) {
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
@@ -105,14 +118,17 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
   async function handleSubmitEmployee(e: React.FormEvent) {
     e.preventDefault();
     const parsedSalary = Number.parseFloat(form.salary);
+    const trimmedId = form.id.trim();
+    const trimmedName = form.name.trim();
     const trimmedEmail = form.email.trim();
+    const trimmedManager = form.manager.trim();
     setFormError(null);
 
-    if (!form.id.trim() && !editingId) {
+    if (!trimmedId && !editingId) {
       setFormError('Employee ID is required for new records.');
       return;
     }
-    if (!form.name.trim()) {
+    if (!trimmedName) {
       setFormError('Employee name is required.');
       return;
     }
@@ -120,8 +136,12 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
       setFormError('Email must be in a valid format (example: name@company.com).');
       return;
     }
-    if (Number.isNaN(parsedSalary) || parsedSalary < 0) {
+    if (Number.isNaN(parsedSalary) || parsedSalary < 0 || !Number.isFinite(parsedSalary)) {
       setFormError('Salary must be a non-negative number.');
+      return;
+    }
+    if (!isIsoDate(form.hireDate)) {
+      setFormError('Hire date must be a valid YYYY-MM-DD date.');
       return;
     }
 
@@ -129,7 +149,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     try {
       if (editingId) {
         const updated = await updateEmployee(editingId, {
-          name: form.name,
+          name: trimmedName,
           email: trimmedEmail || undefined,
           department: form.department || undefined,
           title: form.title || undefined,
@@ -137,15 +157,15 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           geography: form.geography || undefined,
           level: form.level || undefined,
           salary: parsedSalary,
-          manager: form.manager || undefined,
+          manager: trimmedManager || undefined,
           hireDate: form.hireDate || undefined,
         });
         setRows((current) => current.map((row) => (row.id === updated.id ? updated : row)));
         showToast('Employee updated');
       } else {
         const created = await createEmployee({
-          id: form.id,
-          name: form.name,
+          id: trimmedId,
+          name: trimmedName,
           email: trimmedEmail || undefined,
           department: form.department || undefined,
           title: form.title || undefined,
@@ -153,7 +173,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           geography: form.geography || undefined,
           level: form.level || undefined,
           salary: parsedSalary,
-          manager: form.manager || undefined,
+          manager: trimmedManager || undefined,
           hireDate: form.hireDate || undefined,
         });
         setRows((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
@@ -324,8 +344,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                       <td>{e.manager ?? '—'}</td>
                       <td>{fmtDate(e.hireDate)}</td>
                       {!readOnly && <td>
-                        {formError && <div className="alert alert-red" style={{ marginBottom: 12 }}><div className="alert-icon">✕</div><div>{formError}</div></div>}
-              <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8 }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => { setEditingId(e.id); setForm(employeeToForm(e)); }}>Edit</button>
                           <button className="btn btn-danger btn-sm" onClick={() => { void handleDelete(e.id); }}>Delete</button>
                         </div>

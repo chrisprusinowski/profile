@@ -238,7 +238,7 @@ recommendationsRouter.put(
         return;
       }
 
-      const meritPct = roundTo(parsed.data.meritPct ?? existing.rows[0]?.merit_pct ?? 0);
+      const existingRow = existing.rows[0] ?? null;
       const eligibilityPercent = calculateEligibilityPercent(
         employeeResult.rows[0].hire_date ?? null,
         cycle
@@ -253,34 +253,57 @@ recommendationsRouter.put(
           });
         return;
       }
+
       const eligibleSalaryBase =
         Number(employeeResult.rows[0].salary) *
         (ineligible && cycle.allow_eligibility_override
           ? 1
           : eligibilityPercent);
-      const meritAmount = roundTo(
-        parsed.data.meritAmount ??
-        eligibleSalaryBase * (Number(meritPct) / 100)
-      );
+
+      const hasMeritPctPatch = parsed.data.meritPct !== undefined;
+      const hasMeritAmountPatch = parsed.data.meritAmount !== undefined;
+
+      let meritPct = roundTo(existingRow?.merit_pct ?? 0);
+      let meritAmount = roundTo(existingRow?.merit_amount ?? 0);
+
+      if (hasMeritPctPatch) {
+        meritPct = roundTo(parsed.data.meritPct ?? 0);
+        meritAmount = roundTo(eligibleSalaryBase * (meritPct / 100));
+      } else if (hasMeritAmountPatch) {
+        meritAmount = roundTo(parsed.data.meritAmount ?? 0);
+        meritPct = eligibleSalaryBase > 0
+          ? roundTo((meritAmount / eligibleSalaryBase) * 100)
+          : 0;
+      } else {
+        meritAmount = roundTo(eligibleSalaryBase * (meritPct / 100));
+      }
+
       const performanceRating =
         parsed.data.performanceRating ??
-        existing.rows[0]?.performance_rating ??
+        existingRow?.performance_rating ??
         2;
-      const notes = parsed.data.notes ?? existing.rows[0]?.notes ?? '';
+      const notes = (parsed.data.notes ?? existingRow?.notes ?? '').trim();
       const bonusTargetPercent =
         parsed.data.bonusTargetPercent == null
-          ? (existing.rows[0]?.bonus_target_percent ?? null)
+          ? (existingRow?.bonus_target_percent ?? null)
           : roundTo(parsed.data.bonusTargetPercent);
-      const bonusPayoutPercent = roundTo(
-        parsed.data.bonusPayoutPercent ??
-        existing.rows[0]?.bonus_payout_percent ??
-        0
-      );
-      const bonusPayoutAmount = roundTo(
-        parsed.data.bonusPayoutAmount ??
-        existing.rows[0]?.bonus_payout_amount ??
-        0
-      );
+
+      const hasBonusPercentPatch = parsed.data.bonusPayoutPercent !== undefined;
+      const hasBonusAmountPatch = parsed.data.bonusPayoutAmount !== undefined;
+      let bonusPayoutPercent = roundTo(existingRow?.bonus_payout_percent ?? 0);
+      let bonusPayoutAmount = roundTo(existingRow?.bonus_payout_amount ?? 0);
+
+      if (hasBonusAmountPatch) {
+        bonusPayoutAmount = roundTo(parsed.data.bonusPayoutAmount ?? 0);
+        bonusPayoutPercent = eligibleSalaryBase > 0
+          ? roundTo((bonusPayoutAmount / eligibleSalaryBase) * 100)
+          : 0;
+      } else if (hasBonusPercentPatch) {
+        bonusPayoutPercent = roundTo(parsed.data.bonusPayoutPercent ?? 0);
+        bonusPayoutAmount = roundTo(
+          eligibleSalaryBase * (bonusPayoutPercent / 100)
+        );
+      }
 
       const result = await pool.query(
         `INSERT INTO merit_recommendations (cycle_id, employee_id, merit_pct, merit_amount, performance_rating, notes, status, bonus_target_percent, bonus_payout_percent, bonus_payout_amount, updated_by)
