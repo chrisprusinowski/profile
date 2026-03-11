@@ -76,6 +76,14 @@ export interface Cycle {
   budgetTotal: number;
   guidelineMin: number;
   guidelineMax: number;
+  meritBudgetPercent: number;
+  bonusBudgetPercent: number;
+  guidelineMaxPercent: number;
+  minTenureDays: number;
+  allowEligibilityOverride: boolean;
+  enableProration: boolean;
+  prorationStartDate: string;
+  eligibilityCutoffDate: string;
   status: string;
 }
 

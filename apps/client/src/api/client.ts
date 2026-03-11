@@ -52,6 +52,14 @@ const DEFAULT_CYCLE: Cycle = {
   budgetTotal: 0,
   guidelineMin: 0,
   guidelineMax: 10,
+  meritBudgetPercent: 3.5,
+  bonusBudgetPercent: 10,
+  guidelineMaxPercent: 10,
+  minTenureDays: 0,
+  allowEligibilityOverride: false,
+  enableProration: false,
+  prorationStartDate: '',
+  eligibilityCutoffDate: '',
   status: 'open'
 };
 
@@ -166,7 +174,12 @@ export async function createAppUser(payload: {
 
 export async function updateAppUser(
   email: string,
-  payload: { role?: AppUser['role']; managerName?: string; managerEmail?: string; isActive?: boolean }
+  payload: {
+    role?: AppUser['role'];
+    managerName?: string;
+    managerEmail?: string;
+    isActive?: boolean;
+  }
 ): Promise<AppUserRecord> {
   requireApi();
   const res = await authedFetch(
@@ -246,11 +259,17 @@ export async function importEmployeesCsv(payload: {
   );
 }
 
-
-export async function fetchPayRanges(includeInactive = true): Promise<PayRange[]> {
+export async function fetchPayRanges(
+  includeInactive = true
+): Promise<PayRange[]> {
   requireApi();
-  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges?includeInactive=${includeInactive ? 'true' : 'false'}`);
-  return readApiData<PayRange[]>(res, `Failed to load pay ranges: ${res.status}`);
+  const res = await authedFetch(
+    `${API_BASE}/api/v1/pay-ranges?includeInactive=${includeInactive ? 'true' : 'false'}`
+  );
+  return readApiData<PayRange[]>(
+    res,
+    `Failed to load pay ranges: ${res.status}`
+  );
 }
 
 export async function createPayRange(payload: PayRange): Promise<PayRange> {
@@ -260,33 +279,49 @@ export async function createPayRange(payload: PayRange): Promise<PayRange> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return readApiData<PayRange>(res, `Failed to create pay range: ${res.status}`);
+  return readApiData<PayRange>(
+    res,
+    `Failed to create pay range: ${res.status}`
+  );
 }
 
-export async function updatePayRange(id: number, payload: PayRange): Promise<PayRange> {
+export async function updatePayRange(
+  id: number,
+  payload: PayRange
+): Promise<PayRange> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return readApiData<PayRange>(res, `Failed to update pay range: ${res.status}`);
+  return readApiData<PayRange>(
+    res,
+    `Failed to update pay range: ${res.status}`
+  );
 }
 
 export async function deactivatePayRange(id: number): Promise<void> {
   requireApi();
-  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges/${id}`, { method: 'DELETE' });
+  const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges/${id}`, {
+    method: 'DELETE'
+  });
   await readApiData(res, `Failed to deactivate pay range: ${res.status}`);
 }
 
-export async function importPayRangesCsv(payload: { csvContent: string }): Promise<PayRangeImportSummary> {
+export async function importPayRangesCsv(payload: {
+  csvContent: string;
+}): Promise<PayRangeImportSummary> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/pay-ranges/import-csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
-  return readApiData<PayRangeImportSummary>(res, `Failed to import pay ranges CSV: ${res.status}`);
+  return readApiData<PayRangeImportSummary>(
+    res,
+    `Failed to import pay ranges CSV: ${res.status}`
+  );
 }
 
 export async function fetchCycle(): Promise<Cycle> {
@@ -401,22 +436,37 @@ export async function submitAllRecommendations(
   localStorage.setItem(LS_RECS, JSON.stringify(recs));
 }
 
-
 export async function lockAllRecommendations(): Promise<{ locked: number }> {
   requireApi();
-  const res = await authedFetch(`${API_BASE}/api/v1/recommendations/lock-all`, { method: 'POST' });
-  return readApiData<{ locked: number }>(res, `Failed to lock recommendations: ${res.status}`);
+  const res = await authedFetch(`${API_BASE}/api/v1/recommendations/lock-all`, {
+    method: 'POST'
+  });
+  return readApiData<{ locked: number }>(
+    res,
+    `Failed to lock recommendations: ${res.status}`
+  );
 }
 
-export async function reopenAllRecommendations(): Promise<{ reopened: number }> {
+export async function reopenAllRecommendations(): Promise<{
+  reopened: number;
+}> {
   requireApi();
-  const res = await authedFetch(`${API_BASE}/api/v1/recommendations/reopen-all`, { method: 'POST' });
-  return readApiData<{ reopened: number }>(res, `Failed to reopen recommendations: ${res.status}`);
+  const res = await authedFetch(
+    `${API_BASE}/api/v1/recommendations/reopen-all`,
+    { method: 'POST' }
+  );
+  return readApiData<{ reopened: number }>(
+    res,
+    `Failed to reopen recommendations: ${res.status}`
+  );
 }
 
-export async function downloadExport(path: 'employees.csv' | 'recommendations.csv'): Promise<string> {
+export async function downloadExport(
+  path: 'employees.csv' | 'recommendations.csv'
+): Promise<string> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/exports/${path}`);
-  if (!res.ok) throw await parseError(res, `Failed to export ${path}: ${res.status}`);
+  if (!res.ok)
+    throw await parseError(res, `Failed to export ${path}: ${res.status}`);
   return res.text();
 }

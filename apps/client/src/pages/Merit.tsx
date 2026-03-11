@@ -11,9 +11,15 @@ import {
   fmtK,
   initials,
   avatarColor,
-  statusBadgeClass
+  statusBadgeClass,
+  getEligibility
 } from '../utils.js';
-import { lockAllRecommendations, reopenAllRecommendations, saveRecommendation, submitAllRecommendations } from '../api/client.js';
+import {
+  lockAllRecommendations,
+  reopenAllRecommendations,
+  saveRecommendation,
+  submitAllRecommendations
+} from '../api/client.js';
 
 interface Props {
   employees: Employee[];
@@ -43,24 +49,37 @@ export function Merit({
   const [modalData, setModalData] = useState<Partial<Recommendation>>({});
   const [savingEmployeeId, setSavingEmployeeId] = useState<string | null>(null);
 
-  const guidelineMax = cycle?.guidelineMax ?? 10;
-  const totalActualPayroll = employees.reduce((s, e) => s + e.salary, 0);
-  const budgetTotal = cycle?.budgetTotal
-    ? Number(cycle.budgetTotal)
-    : totalActualPayroll * ((cycle?.budgetPct ?? 3.5) / 100);
-
+  const guidelineMax = cycle?.guidelineMaxPercent ?? 10;
+  let eligiblePayroll = 0;
   let allocated = 0;
   let bonusAllocated = 0;
   let sumPct = 0;
+  let eligibleCount = 0;
   for (const e of employees) {
     const rec = recommendations[e.id];
+    const eligibility = getEligibility(e.hireDate, cycle);
+    const eligibleBase = e.salary * eligibility.eligibilityPercent;
+    const useOverride =
+      eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
+    const budgetBase = useOverride ? e.salary : eligibleBase;
+    if (budgetBase > 0) eligibleCount += 1;
+    eligiblePayroll += budgetBase;
     const pct = rec?.meritPct ?? 0;
-    allocated += e.salary * (pct / 100);
-    bonusAllocated += rec?.bonusPayoutAmount ?? 0;
+    allocated += budgetBase * (pct / 100);
+    bonusAllocated +=
+      rec?.bonusPayoutAmount && rec?.bonusPayoutAmount > 0
+        ? rec.bonusPayoutAmount
+        : budgetBase * ((rec?.bonusPayoutPercent ?? 0) / 100);
     sumPct += pct;
   }
 
-  const avgPct = employees.length ? sumPct / employees.length : 0;
+  const meritBudgetPct = cycle?.meritBudgetPercent ?? cycle?.budgetPct ?? 3.5;
+  const bonusBudgetPct = cycle?.bonusBudgetPercent ?? 10;
+  const budgetTotal = cycle?.budgetTotal
+    ? Number(cycle.budgetTotal)
+    : eligiblePayroll * (meritBudgetPct / 100);
+  const bonusBudgetTotal = eligiblePayroll * (bonusBudgetPct / 100);
+  const avgPct = eligibleCount ? sumPct / eligibleCount : 0;
   const remaining = budgetTotal - allocated;
   const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
 
@@ -92,7 +111,18 @@ export function Merit({
     async (employeeId: string, patch: Partial<Recommendation>) => {
       const current = recommendations[employeeId];
       const meritPct = patch.meritPct ?? current?.meritPct ?? 0;
-      const locked = readOnly || cycle?.status !== 'open' || current?.status === 'Submitted' || current?.status === 'Locked';
+      const eligibility = employees.find((emp) => emp.id === employeeId)
+        ? getEligibility(
+            employees.find((emp) => emp.id === employeeId)?.hireDate,
+            cycle
+          )
+        : { ineligible: false };
+      const locked =
+        readOnly ||
+        cycle?.status !== 'open' ||
+        current?.status === 'Submitted' ||
+        current?.status === 'Locked' ||
+        (eligibility.ineligible && !cycle?.allowEligibilityOverride);
       if (locked) return;
 
       if (meritPct < 0) {
@@ -100,8 +130,10 @@ export function Merit({
         return;
       }
 
-      const bonusPayoutPercent = patch.bonusPayoutPercent ?? current?.bonusPayoutPercent ?? 0;
-      const bonusPayoutAmount = patch.bonusPayoutAmount ?? current?.bonusPayoutAmount ?? 0;
+      const bonusPayoutPercent =
+        patch.bonusPayoutPercent ?? current?.bonusPayoutPercent ?? 0;
+      const bonusPayoutAmount =
+        patch.bonusPayoutAmount ?? current?.bonusPayoutAmount ?? 0;
       if (bonusPayoutPercent < 0 || bonusPayoutAmount < 0) {
         showToast('Bonus values cannot be negative');
         return;
@@ -128,12 +160,24 @@ export function Merit({
         await saveRecommendation(employeeId, next);
         await refreshRecommendations();
       } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Failed to save recommendation');
+        showToast(
+          error instanceof Error
+            ? error.message
+            : 'Failed to save recommendation'
+        );
       } finally {
         setSavingEmployeeId(null);
       }
     },
-    [cycle?.status, guidelineMax, readOnly, recommendations, refreshRecommendations, showToast]
+    [
+      cycle,
+      employees,
+      guidelineMax,
+      readOnly,
+      recommendations,
+      refreshRecommendations,
+      showToast
+    ]
   );
 
   const openModal = (id: string) => {
@@ -194,14 +238,38 @@ export function Merit({
         </div>
         <div className="topbar-right">
           {!readOnly && (
-            <button className="btn btn-primary btn-sm" onClick={submitAll} disabled={!isCycleOpen}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={submitAll}
+              disabled={!isCycleOpen}
+            >
               Submit All Drafts
             </button>
           )}
           {currentUser.role === 'admin' && (
             <>
-              <button className="btn btn-secondary btn-sm" onClick={async () => { const r = await lockAllRecommendations(); await refreshRecommendations(); showToast(`Locked ${r.locked}`); }} style={{ marginLeft: 8 }}>Lock Submitted</button>
-              <button className="btn btn-secondary btn-sm" onClick={async () => { const r = await reopenAllRecommendations(); await refreshRecommendations(); showToast(`Reopened ${r.reopened}`); }} style={{ marginLeft: 8 }}>Reopen Locked</button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={async () => {
+                  const r = await lockAllRecommendations();
+                  await refreshRecommendations();
+                  showToast(`Locked ${r.locked}`);
+                }}
+                style={{ marginLeft: 8 }}
+              >
+                Lock Submitted
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={async () => {
+                  const r = await reopenAllRecommendations();
+                  await refreshRecommendations();
+                  showToast(`Reopened ${r.reopened}`);
+                }}
+                style={{ marginLeft: 8 }}
+              >
+                Reopen Locked
+              </button>
             </>
           )}
         </div>
@@ -219,8 +287,8 @@ export function Merit({
               <div className="budget-item-value">{fmtK(allocated)}</div>
             </div>
             <div>
-              <div className="budget-item-label">Bonus Payout Total</div>
-              <div className="budget-item-value">{fmtK(bonusAllocated)}</div>
+              <div className="budget-item-label">Bonus Budget</div>
+              <div className="budget-item-value">{fmtK(bonusBudgetTotal)}</div>
             </div>
             <div>
               <div className="budget-item-label">Avg Merit %</div>
@@ -234,7 +302,8 @@ export function Merit({
             />
           </div>
           <div className="metric-sub" style={{ marginTop: 8 }}>
-            Remaining merit budget: {fmtK(remaining)}
+            Remaining merit budget: {fmtK(remaining)} • Eligible payroll:{' '}
+            {fmtK(eligiblePayroll)} • Bonus allocated: {fmtK(bonusAllocated)}
           </div>
         </div>
 
@@ -265,7 +334,7 @@ export function Merit({
             <option value="">All Statuses</option>
             <option>Draft</option>
             <option>Submitted</option>
-                    <option>Locked</option>
+            <option>Locked</option>
           </select>
         </div>
 
@@ -275,6 +344,8 @@ export function Merit({
               <tr>
                 <th>Employee</th>
                 <th className="numeric">Salary</th>
+                <th>Eligibility</th>
+                <th className="numeric">Proration %</th>
                 <th>Pay Band</th>
                 <th className="numeric">Compa</th>
                 <th className="numeric">Merit %</th>
@@ -287,7 +358,11 @@ export function Merit({
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="text-muted" style={{ textAlign: 'center', padding: 20 }}>
+                  <td
+                    colSpan={11}
+                    className="text-muted"
+                    style={{ textAlign: 'center', padding: 20 }}
+                  >
                     No employees match the current filters.
                   </td>
                 </tr>
@@ -296,13 +371,29 @@ export function Merit({
                 const rec = recommendations[e.id];
                 const meritPct = rec?.meritPct ?? 0;
                 const status = rec?.status ?? 'Draft';
-                const locked = readOnly || cycle?.status !== 'open' || status === 'Submitted' || status === 'Locked' || savingEmployeeId === e.id;
+                const eligibility = getEligibility(e.hireDate, cycle);
+                const ineligible =
+                  eligibility.ineligible && !cycle?.allowEligibilityOverride;
+                const locked =
+                  readOnly ||
+                  cycle?.status !== 'open' ||
+                  status === 'Submitted' ||
+                  status === 'Locked' ||
+                  savingEmployeeId === e.id ||
+                  ineligible;
 
                 const pay = e.payRange;
-                const payBandLabel = pay?.bandStatus === 'below_range' ? 'Below range' : pay?.bandStatus === 'above_range' ? 'Above range' : pay?.bandStatus === 'in_range' ? 'In range' : 'No range matched';
+                const payBandLabel =
+                  pay?.bandStatus === 'below_range'
+                    ? 'Below range'
+                    : pay?.bandStatus === 'above_range'
+                      ? 'Above range'
+                      : pay?.bandStatus === 'in_range'
+                        ? 'In range'
+                        : 'No range matched';
 
                 return (
-                  <tr key={e.id}>
+                  <tr key={e.id} className={ineligible ? 'row-ineligible' : ''}>
                     <td>
                       <div className="employee-cell">
                         <div
@@ -320,17 +411,38 @@ export function Merit({
                       </div>
                     </td>
                     <td className="numeric">{fmt(e.salary)}</td>
+                    <td>
+                      {ineligible ? (
+                        <span className="badge badge-red">Ineligible</span>
+                      ) : (
+                        eligibility.label
+                      )}
+                    </td>
+                    <td className="numeric">
+                      {(eligibility.eligibilityPercent * 100).toFixed(0)}%
+                    </td>
                     <td style={{ fontSize: 12 }}>
-                      {pay?.matchedRangeMin != null && pay?.matchedRangeMax != null ? (
+                      {pay?.matchedRangeMin != null &&
+                      pay?.matchedRangeMax != null ? (
                         <div>
-                          <div>{fmt(pay.matchedRangeMin)} - {fmt(pay.matchedRangeMax)}</div>
-                          <div className="employee-title">{payBandLabel}{pay?.matchedBy ? ` · ${pay.matchedBy}` : ''}</div>
+                          <div>
+                            {fmt(pay.matchedRangeMin)} -{' '}
+                            {fmt(pay.matchedRangeMax)}
+                          </div>
+                          <div className="employee-title">
+                            {payBandLabel}
+                            {pay?.matchedBy ? ` · ${pay.matchedBy}` : ''}
+                          </div>
                         </div>
                       ) : (
                         <span className="text-muted">No range matched</span>
                       )}
                     </td>
-                    <td className="numeric">{pay?.compaRatio != null ? `${(pay.compaRatio * 100).toFixed(1)}%` : '—'}</td>
+                    <td className="numeric">
+                      {pay?.compaRatio != null
+                        ? `${(pay.compaRatio * 100).toFixed(1)}%`
+                        : '—'}
+                    </td>
                     <td>
                       <input
                         className="merit-pct-input"
