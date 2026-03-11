@@ -2,26 +2,18 @@ import { Router } from 'express';
 import { z } from 'zod';
 import {
   assertEmployeeInScope,
-  getManagerScopeEmail,
-  getManagerScopeName,
+  getEffectiveManagerScope,
   requireRole,
   type AuthenticatedRequest
 } from '../auth.js';
 import { logAuditEvent } from '../audit.js';
 import { pool } from '../db.js';
+import {
+  calculateEligibilityPercent,
+  roundTo
+} from '../recommendationCalculations.js';
 
 export const recommendationsRouter = Router();
-
-function dateFromIso(value: string): Date | null {
-  if (!value) return null;
-  const d = new Date(`${value}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function roundTo(value: number, decimals = 2) {
-  const p = 10 ** decimals;
-  return Math.round((value + Number.EPSILON) * p) / p;
-}
 
 const recommendationPayloadSchema = z.object({
   meritPct: z.coerce.number().finite().min(0).max(25).optional(),
@@ -52,52 +44,26 @@ const recommendationPayloadSchema = z.object({
 
 async function getCurrentCycle() {
   const result =
-    await pool.query(`SELECT id, status, effective_date, min_tenure_days, allow_eligibility_override, enable_proration, proration_start_date, eligibility_cutoff_date
+    await pool.query(`SELECT id, status,
+            effective_date::text AS "effectiveDate",
+            min_tenure_days AS "minTenureDays",
+            allow_eligibility_override AS "allowEligibilityOverride",
+            enable_proration AS "enableProration",
+            proration_start_date::text AS "prorationStartDate",
+            eligibility_cutoff_date::text AS "eligibilityCutoffDate"
     FROM merit_cycles ORDER BY id DESC LIMIT 1`);
   return result.rows[0] as
     | {
         id: number;
         status: string;
-        effective_date: string | null;
-        min_tenure_days: number | null;
-        allow_eligibility_override: boolean | null;
-        enable_proration: boolean | null;
-        proration_start_date: string | null;
-        eligibility_cutoff_date: string | null;
+        effectiveDate: string | null;
+        minTenureDays: number | null;
+        allowEligibilityOverride: boolean | null;
+        enableProration: boolean | null;
+        prorationStartDate: string | null;
+        eligibilityCutoffDate: string | null;
       }
     | undefined;
-}
-
-function calculateEligibilityPercent(
-  hireDateRaw: string | null,
-  cycle: NonNullable<Awaited<ReturnType<typeof getCurrentCycle>>>
-) {
-  if (!hireDateRaw) return 1;
-  const hireDate = dateFromIso(hireDateRaw);
-  if (!hireDate) return 1;
-
-  const asOfDate = cycle.effective_date
-    ? dateFromIso(cycle.effective_date) ?? new Date()
-    : new Date();
-  const minTenureDays = Number(cycle.min_tenure_days ?? 0);
-  const tenureDays = Math.floor(
-    (asOfDate.getTime() - hireDate.getTime()) / 86400000
-  );
-  if (tenureDays < minTenureDays) return 0;
-
-  if (!cycle.enable_proration) return 1;
-  if (!cycle.proration_start_date || !cycle.eligibility_cutoff_date) return 1;
-
-  const prorationStart = dateFromIso(cycle.proration_start_date);
-  const cutoff = dateFromIso(cycle.eligibility_cutoff_date);
-  if (!prorationStart || !cutoff || prorationStart >= cutoff) return 1;
-
-  if (hireDate < prorationStart) return 1;
-  if (hireDate >= cutoff) return 0;
-
-  const windowMs = cutoff.getTime() - prorationStart.getTime();
-  const eligibleMs = cutoff.getTime() - hireDate.getTime();
-  return Math.max(0, Math.min(1, eligibleMs / windowMs));
 }
 
 function canEditRecommendation(
@@ -114,8 +80,8 @@ async function getScopedRecommendations(
   cycleId: number,
   req: AuthenticatedRequest
 ) {
-  const managerScopeName = getManagerScopeName(req.user!);
-  const managerScopeEmail = getManagerScopeEmail(req.user!);
+  const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
+    getEffectiveManagerScope(req.user!);
   const result =
     managerScopeName || managerScopeEmail
       ? await pool.query(
@@ -244,7 +210,7 @@ recommendationsRouter.put(
         cycle
       );
       const ineligible = eligibilityPercent <= 0;
-      if (ineligible && !cycle.allow_eligibility_override) {
+      if (ineligible && !cycle.allowEligibilityOverride) {
         res
           .status(400)
           .json({
@@ -256,7 +222,7 @@ recommendationsRouter.put(
 
       const eligibleSalaryBase =
         Number(employeeResult.rows[0].salary) *
-        (ineligible && cycle.allow_eligibility_override
+        (ineligible && cycle.allowEligibilityOverride
           ? 1
           : eligibilityPercent);
 
@@ -371,8 +337,8 @@ recommendationsRouter.post(
         return;
       }
 
-      const managerScopeName = getManagerScopeName(req.user!);
-      const managerScopeEmail = getManagerScopeEmail(req.user!);
+      const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
+        getEffectiveManagerScope(req.user!);
       const result =
         managerScopeName || managerScopeEmail
           ? await pool.query(

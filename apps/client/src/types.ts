@@ -22,6 +22,7 @@ export interface Employee {
   level?: string;
   salary: number;
   manager?: string;
+  managerEmail?: string;
   hireDate?: string;
   payRange?: EmployeePayRange;
 }

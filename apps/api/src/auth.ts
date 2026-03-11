@@ -89,10 +89,19 @@ export function getManagerScopeEmail(user: AppUser): string | null {
   return null;
 }
 
+export function getEffectiveManagerScope(user: AppUser): {
+  managerName: string | null;
+  managerEmail: string | null;
+} {
+  const managerName = getManagerScopeName(user);
+  const configuredEmail = getManagerScopeEmail(user);
+  const managerEmail = configuredEmail ?? normalizeEmail(user.email);
+  return { managerName, managerEmail };
+}
+
 export async function assertEmployeeInScope(user: AppUser, employeeId: string): Promise<boolean> {
   if (user.role !== 'manager') return true;
-  const managerName = getManagerScopeName(user);
-  const managerEmail = getManagerScopeEmail(user);
+  const { managerName, managerEmail } = getEffectiveManagerScope(user);
   if (!managerName && !managerEmail) return false;
 
   const result = await pool.query(

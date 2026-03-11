@@ -2,14 +2,14 @@ import { Router } from 'express';
 import { readFile } from 'fs/promises';
 import { z } from 'zod';
 import {
-  getManagerScopeEmail,
-  getManagerScopeName,
+  getEffectiveManagerScope,
   requireRole,
   type AuthenticatedRequest
 } from '../auth.js';
 import { pool } from '../db.js';
 import { findBestPayRange, type PayRangeRecord } from '../payRanges.js';
 import { logAuditEvent } from '../audit.js';
+import { recalculateRecommendationAmountsForEmployee } from '../recommendationCalculations.js';
 
 export const employeesRouter = Router();
 
@@ -153,9 +153,8 @@ async function fetchEmployeesFromDb(
 
 employeesRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
-    const managerScopeName = getManagerScopeName(req.user!);
-    const managerScopeEmail =
-      getManagerScopeEmail(req.user!) ?? req.user?.email?.toLowerCase() ?? null;
+    const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
+      getEffectiveManagerScope(req.user!);
     const employees = await fetchEmployeesFromDb(managerScopeName, managerScopeEmail);
     res.json({ success: true, data: employees });
   } catch (error) {
@@ -192,10 +191,12 @@ employeesRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
                  level,
                  salary::float AS salary,
                  manager,
+                 manager_email AS "managerEmail",
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
       [employee.id, employee.name, employee.email ?? '', employee.department ?? '', employee.title ?? '', employee.positionType ?? '', employee.geography ?? '', employee.level ?? '', employee.salary, employee.manager ?? '', employee.managerEmail ?? '', hireDate],
     );
 
+    await recalculateRecommendationAmountsForEmployee(result.rows[0].id);
     const ranges = await loadPayRanges();
     await logAuditEvent({ actionType: 'employee.created', actorEmail: req.user!.email, targetEntity: 'employees', targetId: result.rows[0].id, newValues: result.rows[0] });
     res.status(201).json({ success: true, data: { ...result.rows[0], payRange: findBestPayRange(result.rows[0], ranges) } });
@@ -248,6 +249,7 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
                  level,
                  salary::float AS salary,
                  manager,
+                 manager_email AS "managerEmail",
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
       [parsed.data.name, parsed.data.email ?? '', parsed.data.department ?? '', parsed.data.title ?? '', parsed.data.positionType ?? '', parsed.data.geography ?? '', parsed.data.level ?? '', parsed.data.salary, parsed.data.manager ?? '', parsed.data.managerEmail ?? '', hireDate, req.params.id],
     );
@@ -257,6 +259,7 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
       return;
     }
 
+    await recalculateRecommendationAmountsForEmployee(String(req.params.id));
     const ranges = await loadPayRanges();
     await logAuditEvent({ actionType: 'employee.updated', actorEmail: req.user!.email, targetEntity: 'employees', targetId: String(req.params.id), newValues: result.rows[0] });
     res.json({ success: true, data: { ...result.rows[0], payRange: findBestPayRange(result.rows[0], ranges) } });

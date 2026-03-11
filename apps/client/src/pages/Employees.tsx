@@ -29,6 +29,7 @@ interface EmployeeFormState {
   level: string;
   salary: string;
   manager: string;
+  managerEmail: string;
   hireDate: string;
 }
 
@@ -43,6 +44,7 @@ const EMPTY_FORM: EmployeeFormState = {
   level: '',
   salary: '0',
   manager: '',
+  managerEmail: '',
   hireDate: '',
 };
 
@@ -58,6 +60,7 @@ function employeeToForm(employee: Employee): EmployeeFormState {
     level: employee.level ?? '',
     salary: String(employee.salary ?? 0),
     manager: employee.manager ?? '',
+    managerEmail: employee.managerEmail ?? '',
     hireDate: employee.hireDate ?? '',
   };
 }
@@ -122,6 +125,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     const trimmedName = form.name.trim();
     const trimmedEmail = form.email.trim();
     const trimmedManager = form.manager.trim();
+    const trimmedManagerEmail = form.managerEmail.trim().toLowerCase();
     setFormError(null);
 
     if (!trimmedId && !editingId) {
@@ -134,6 +138,10 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     }
     if (trimmedEmail && !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
       setFormError('Email must be in a valid format (example: name@company.com).');
+      return;
+    }
+    if (trimmedManagerEmail && !/^\S+@\S+\.\S+$/.test(trimmedManagerEmail)) {
+      setFormError('Manager email must be in a valid format (example: manager@company.com).');
       return;
     }
     if (Number.isNaN(parsedSalary) || parsedSalary < 0 || !Number.isFinite(parsedSalary)) {
@@ -158,6 +166,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           level: form.level || undefined,
           salary: parsedSalary,
           manager: trimmedManager || undefined,
+          managerEmail: trimmedManagerEmail || undefined,
           hireDate: form.hireDate || undefined,
         });
         setRows((current) => current.map((row) => (row.id === updated.id ? updated : row)));
@@ -174,6 +183,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           level: form.level || undefined,
           salary: parsedSalary,
           manager: trimmedManager || undefined,
+          managerEmail: trimmedManagerEmail || undefined,
           hireDate: form.hireDate || undefined,
         });
         setRows((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
@@ -262,6 +272,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
               </div>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Manager</label><input className="form-input" value={form.manager} onChange={(e) => setForm((f) => ({ ...f, manager: e.target.value }))} /></div>
+                <div className="form-group"><label className="form-label">Manager Email</label><input className="form-input" type="email" value={form.managerEmail} onChange={(e) => setForm((f) => ({ ...f, managerEmail: e.target.value }))} /></div>
               </div>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Salary</label><input className="form-input" type="number" min="0" step="0.01" value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))} /></div>
@@ -341,7 +352,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                       <td>{e.title ?? '—'}</td>
                       <td>{e.positionType ?? '—'} / {e.geography ?? '—'}</td>
                       <td className="numeric">{fmt(e.salary)}</td>
-                      <td>{e.manager ?? '—'}</td>
+                      <td>{e.manager ?? '—'}{e.managerEmail ? <div className="employee-title">{e.managerEmail}</div> : null}</td>
                       <td>{fmtDate(e.hireDate)}</td>
                       {!readOnly && <td>
                         <div style={{ display: 'flex', gap: 8 }}>

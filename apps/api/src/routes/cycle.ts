@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireRole, type AuthenticatedRequest } from '../auth.js';
 import { logAuditEvent } from '../audit.js';
 import { pool } from '../db.js';
+import { recalculateRecommendationAmountsForCycle } from '../recommendationCalculations.js';
 
 export const cycleRouter = Router();
 
@@ -223,6 +224,7 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
         return res
           .status(404)
           .json({ error: `Cycle ${String(payload.id)} not found` });
+      await recalculateRecommendationAmountsForCycle(payload.id);
       await logAuditEvent({
         actionType: 'cycle.updated',
         actorEmail: req.user!.email,
@@ -260,6 +262,7 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
         payload.status
       ]
     );
+    await recalculateRecommendationAmountsForCycle(result.rows[0].id);
     await logAuditEvent({
       actionType: 'cycle.updated',
       actorEmail: req.user!.email,
