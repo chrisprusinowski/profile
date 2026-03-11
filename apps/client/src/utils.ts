@@ -72,7 +72,15 @@ export type EligibilityResult = {
   eligibilityPercent: number;
   ineligible: boolean;
   label: string;
+  status: 'full' | 'prorated' | 'ineligible';
 };
+
+
+function dateFromIso(value: string): Date | null {
+  if (!value) return null;
+  const d = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 export function getEligibility(
   employeeHireDate: string | undefined,
@@ -85,41 +93,37 @@ export function getEligibility(
   } | null
 ): EligibilityResult {
   if (!cycle || !employeeHireDate)
-    return { eligibilityPercent: 1, ineligible: false, label: '100%' };
-  const hireDate = new Date(employeeHireDate);
-  if (Number.isNaN(hireDate.getTime()))
-    return { eligibilityPercent: 1, ineligible: false, label: '100%' };
+    return { eligibilityPercent: 1, ineligible: false, label: 'Full', status: 'full' };
+  const hireDate = dateFromIso(employeeHireDate);
+  if (!hireDate)
+    return { eligibilityPercent: 1, ineligible: false, label: 'Full', status: 'full' };
 
-  const asOf = cycle.effectiveDate ? new Date(cycle.effectiveDate) : new Date();
+  const asOf = cycle.effectiveDate ? dateFromIso(cycle.effectiveDate) ?? new Date() : new Date();
   const minTenureDays = Number(cycle.minTenureDays ?? 0);
   const tenureDays = Math.floor(
     (asOf.getTime() - hireDate.getTime()) / 86400000
   );
   if (tenureDays < minTenureDays)
-    return { eligibilityPercent: 0, ineligible: true, label: 'Ineligible' };
+    return { eligibilityPercent: 0, ineligible: true, label: 'Ineligible', status: 'ineligible' };
 
   if (
     !cycle.enableProration ||
     !cycle.prorationStartDate ||
     !cycle.eligibilityCutoffDate
   ) {
-    return { eligibilityPercent: 1, ineligible: false, label: '100%' };
+    return { eligibilityPercent: 1, ineligible: false, label: 'Full', status: 'full' };
   }
 
-  const prorationStart = new Date(cycle.prorationStartDate);
-  const cutoff = new Date(cycle.eligibilityCutoffDate);
-  if (
-    Number.isNaN(prorationStart.getTime()) ||
-    Number.isNaN(cutoff.getTime()) ||
-    prorationStart >= cutoff
-  ) {
-    return { eligibilityPercent: 1, ineligible: false, label: '100%' };
+  const prorationStart = dateFromIso(cycle.prorationStartDate);
+  const cutoff = dateFromIso(cycle.eligibilityCutoffDate);
+  if (!prorationStart || !cutoff || prorationStart >= cutoff) {
+    return { eligibilityPercent: 1, ineligible: false, label: 'Full', status: 'full' };
   }
 
   if (hireDate < prorationStart)
-    return { eligibilityPercent: 1, ineligible: false, label: '100%' };
+    return { eligibilityPercent: 1, ineligible: false, label: 'Full', status: 'full' };
   if (hireDate >= cutoff)
-    return { eligibilityPercent: 0, ineligible: true, label: 'Ineligible' };
+    return { eligibilityPercent: 0, ineligible: true, label: 'Ineligible', status: 'ineligible' };
 
   const span = cutoff.getTime() - prorationStart.getTime();
   const eligible = cutoff.getTime() - hireDate.getTime();
@@ -127,6 +131,7 @@ export function getEligibility(
   return {
     eligibilityPercent: pct,
     ineligible: pct <= 0,
-    label: `${(pct * 100).toFixed(1)}%`
+    label: `Prorated (${(pct * 100).toFixed(2)}%)`,
+    status: pct <= 0 ? 'ineligible' : pct >= 1 ? 'full' : 'prorated'
   };
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { roundTo } from '../comp.js';
 import type {
   AppRole,
   Cycle,
@@ -67,6 +68,7 @@ export function Admin({
   const [importSummary, setImportSummary] =
     useState<PayRangeImportSummary | null>(null);
   const [userError, setUserError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   async function loadPayRanges() {
     const rows = await fetchPayRanges(true);
@@ -84,8 +86,14 @@ export function Admin({
     setForm((f) => (f ? { ...f, [key]: value } : f));
   }
 
+
+  function parsePercentInput(value: string) {
+    return roundTo(Math.max(0, Number(value) || 0));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
     setSaving(true);
     try {
       if (!form || !validateCycleForm()) return;
@@ -96,8 +104,10 @@ export function Admin({
       });
       setCycle(saved);
       showToast('Cycle settings saved');
-    } catch {
-      showToast('Failed to save cycle settings');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save cycle settings';
+      setFormError(msg);
+      showToast(msg);
     } finally {
       setSaving(false);
     }
@@ -238,6 +248,10 @@ export function Admin({
   const totalPayroll = employees.reduce((s, e) => s + e.salary, 0);
 
   const validateCycleForm = () => {
+    if (!form.name.trim()) {
+      setFormError('Cycle name is required');
+      return false;
+    }
     if (
       form.meritBudgetPercent < 0 ||
       form.meritBudgetPercent > 100 ||
@@ -246,21 +260,31 @@ export function Admin({
       form.guidelineMaxPercent < 0 ||
       form.guidelineMaxPercent > 100
     ) {
-      showToast('All percentages must be between 0 and 100');
+      const msg = 'All percentages must be between 0 and 100';
+      setFormError(msg);
+      showToast(msg);
+      return false;
+    }
+    if (form.minTenureDays < 0) {
+      const msg = 'Minimum tenure days cannot be negative';
+      setFormError(msg);
+      showToast(msg);
       return false;
     }
     if (form.enableProration) {
       if (!form.prorationStartDate || !form.eligibilityCutoffDate) {
-        showToast(
-          'Proration start and eligibility cutoff dates are required when proration is enabled'
-        );
+        const msg = 'Proration start and eligibility cutoff dates are required when proration is enabled';
+        setFormError(msg);
+        showToast(msg);
         return false;
       }
       if (
         new Date(form.prorationStartDate) >=
         new Date(form.eligibilityCutoffDate)
       ) {
-        showToast('Eligibility cutoff date must be after proration start date');
+        const msg = 'Eligibility cutoff date must be after proration start date';
+        setFormError(msg);
+        showToast(msg);
         return false;
       }
     }
@@ -352,6 +376,20 @@ export function Admin({
                   />
                 </div>
               </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Total Payroll Reference ($)</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.totalPayroll}
+                    onChange={(e) => update('totalPayroll', roundTo(Math.max(0, Number(e.target.value) || 0)))}
+                  />
+                  <div className="form-hint">Optional: when set, this becomes the payroll basis for budget calculations.</div>
+                </div>
+              </div>
               <div className="divider" />
               <h4 style={{ marginBottom: 10 }}>Comp Budget</h4>
               <div className="form-row">
@@ -365,12 +403,12 @@ export function Admin({
                     step={0.01}
                     value={form.meritBudgetPercent}
                     onChange={(e) =>
-                      update('meritBudgetPercent', parseFloat(e.target.value) || 0)
+                      update('meritBudgetPercent', parsePercentInput(e.target.value))
                     }
                   />
                   <div className="form-hint">
-                    ≈ ${Math.round(totalPayroll * (form.meritBudgetPercent / 100)).toLocaleString()} of {' '}
-                    ${Math.round(totalPayroll).toLocaleString()} payroll
+                    ≈ ${Math.round((form.totalPayroll > 0 ? form.totalPayroll : totalPayroll) * (form.meritBudgetPercent / 100)).toLocaleString()} of {' '}
+                    ${Math.round(form.totalPayroll > 0 ? form.totalPayroll : totalPayroll).toLocaleString()} payroll basis
                   </div>
                 </div>
                 <div className="form-group">
@@ -383,11 +421,11 @@ export function Admin({
                     step={0.01}
                     value={form.bonusBudgetPercent}
                     onChange={(e) =>
-                      update('bonusBudgetPercent', parseFloat(e.target.value) || 0)
+                      update('bonusBudgetPercent', parsePercentInput(e.target.value))
                     }
                   />
                   <div className="form-hint">
-                    ≈ ${Math.round(totalPayroll * (form.bonusBudgetPercent / 100)).toLocaleString()} of payroll
+                    ≈ ${Math.round((form.totalPayroll > 0 ? form.totalPayroll : totalPayroll) * (form.bonusBudgetPercent / 100)).toLocaleString()} of payroll basis
                   </div>
                 </div>
               </div>
@@ -403,7 +441,7 @@ export function Admin({
                     step={0.01}
                     value={form.guidelineMaxPercent}
                     onChange={(e) =>
-                      update('guidelineMaxPercent', parseFloat(e.target.value) || 0)
+                      update('guidelineMaxPercent', parsePercentInput(e.target.value))
                     }
                   />
                   <div className="form-hint">Merit increases above this threshold are flagged for review</div>
@@ -468,10 +506,11 @@ export function Admin({
                 Example: Hired Jan 1–Mar 31: prorated. Hired Apr 1+: ineligible.
               </div>
               <div className="form-hint">
-                Loaded payroll: ${Math.round(totalPayroll).toLocaleString()}
+                Loaded employee payroll: ${Math.round(totalPayroll).toLocaleString()} · Budget payroll basis: ${Math.round(form.totalPayroll > 0 ? form.totalPayroll : totalPayroll).toLocaleString()}
               </div>
             </div>
             <div className="card-footer">
+              {formError && <div className="alert alert-red" style={{ marginBottom: 10 }}>{formError}</div>}
               <button
                 className="btn btn-primary"
                 type="submit"

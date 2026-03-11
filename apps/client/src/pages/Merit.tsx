@@ -6,14 +6,8 @@ import type {
   Recommendation,
   AppUser
 } from '../types.js';
-import {
-  fmt,
-  fmtK,
-  initials,
-  avatarColor,
-  statusBadgeClass,
-  getEligibility
-} from '../utils.js';
+import { fmt, fmtK, initials, avatarColor, statusBadgeClass, getEligibility } from '../utils.js';
+import { buildBudgetSnapshot } from '../comp.js';
 import {
   lockAllRecommendations,
   reopenAllRecommendations,
@@ -50,38 +44,14 @@ export function Merit({
   const [savingEmployeeId, setSavingEmployeeId] = useState<string | null>(null);
 
   const guidelineMax = cycle?.guidelineMaxPercent ?? 10;
-  let eligiblePayroll = 0;
-  let allocated = 0;
-  let bonusAllocated = 0;
-  let sumPct = 0;
-  let eligibleCount = 0;
-  for (const e of employees) {
-    const rec = recommendations[e.id];
-    const eligibility = getEligibility(e.hireDate, cycle);
-    const eligibleBase = e.salary * eligibility.eligibilityPercent;
-    const useOverride =
-      eligibility.ineligible && Boolean(cycle?.allowEligibilityOverride);
-    const budgetBase = useOverride ? e.salary : eligibleBase;
-    if (budgetBase > 0) eligibleCount += 1;
-    eligiblePayroll += budgetBase;
-    const pct = rec?.meritPct ?? 0;
-    allocated += budgetBase * (pct / 100);
-    bonusAllocated +=
-      rec?.bonusPayoutAmount && rec?.bonusPayoutAmount > 0
-        ? rec.bonusPayoutAmount
-        : budgetBase * ((rec?.bonusPayoutPercent ?? 0) / 100);
-    sumPct += pct;
-  }
-
-  const meritBudgetPct = cycle?.meritBudgetPercent ?? cycle?.budgetPct ?? 3.5;
-  const bonusBudgetPct = cycle?.bonusBudgetPercent ?? 10;
-  const budgetTotal = cycle?.budgetTotal
-    ? Number(cycle.budgetTotal)
-    : eligiblePayroll * (meritBudgetPct / 100);
-  const bonusBudgetTotal = eligiblePayroll * (bonusBudgetPct / 100);
-  const avgPct = eligibleCount ? sumPct / eligibleCount : 0;
-  const remaining = budgetTotal - allocated;
-  const pctUsed = budgetTotal ? allocated / budgetTotal : 0;
+  const snapshot = buildBudgetSnapshot(employees, cycle, recommendations);
+  const allocated = snapshot.meritAllocated;
+  const bonusAllocated = snapshot.bonusAllocated;
+  const budgetTotal = snapshot.meritBudgetTotal;
+  const bonusBudgetTotal = snapshot.bonusBudgetTotal;
+  const avgPct = snapshot.avgMeritPct;
+  const remaining = snapshot.remainingMeritBudget;
+  const pctUsed = snapshot.pctUsed;
 
   const depts = useMemo(
     () =>
@@ -302,8 +272,8 @@ export function Merit({
             />
           </div>
           <div className="metric-sub" style={{ marginTop: 8 }}>
-            Remaining merit budget: {fmtK(remaining)} • Eligible payroll:{' '}
-            {fmtK(eligiblePayroll)} • Bonus allocated: {fmtK(bonusAllocated)}
+            Remaining merit budget: {fmtK(remaining)} • Payroll basis:{' '}
+            {fmtK(snapshot.payrollBasis)} • Bonus allocated: {fmtK(bonusAllocated)}
           </div>
         </div>
 
@@ -513,6 +483,11 @@ export function Merit({
                       <span className={`badge ${statusBadgeClass(status)}`}>
                         {status}
                       </span>
+                      {meritPct > guidelineMax && (
+                        <span className="badge badge-amber" style={{ marginRight: 6 }}>
+                          Above guideline
+                        </span>
+                      )}
                       {!locked && (
                         <button
                           className="btn btn-ghost btn-sm"
