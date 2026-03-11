@@ -19,7 +19,7 @@ const twoDecimalNumber = (min: number, max?: number) => {
 };
 
 function roundTo(value: number, decimals = 2) {
-  const p = 10 ** decimals;
+  const p = 10 ** decimalsÍ;
   return Math.round((value + Number.EPSILON) * p) / p;
 }
 
