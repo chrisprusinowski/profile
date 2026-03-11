@@ -23,6 +23,8 @@ function roundTo(value: number, decimals = 2) {
   return Math.round((value + Number.EPSILON) * p) / p;
 }
 
+const ISO_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 const cycleSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   name: z.string().trim().min(1),
@@ -65,10 +67,26 @@ const projection = `id, name, type,
   to_char(eligibility_cutoff_date, 'YYYY-MM-DD') AS "eligibilityCutoffDate",
   status`;
 
-function parseDate(input?: string | null): Date | null {
-  if (!input) return null;
-  const date = new Date(input);
-  return Number.isNaN(date.getTime()) ? null : date;
+function normalizeDateInput(input?: string | null): string | null {
+  const value = input?.trim();
+  if (!value) return null;
+  const match = ISO_DATE_ONLY.exec(value);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    utcDate.getUTCFullYear() !== year ||
+    utcDate.getUTCMonth() + 1 !== month ||
+    utcDate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return value;
 }
 
 cycleRouter.get('/', async (_req, res, next) => {
@@ -129,19 +147,26 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
         .json({ error: 'guidelineMin must be <= guidelineMax' });
     }
 
-    const prorationStartDate = payload.prorationStartDate ?? '';
-    const eligibilityCutoffDate = payload.eligibilityCutoffDate ?? '';
-    const start = parseDate(prorationStartDate);
-    const cutoff = parseDate(eligibilityCutoffDate);
-    if (prorationStartDate && !start)
-      return res
-        .status(400)
-        .json({ error: 'prorationStartDate must be a valid date' });
-    if (eligibilityCutoffDate && !cutoff)
-      return res
-        .status(400)
-        .json({ error: 'eligibilityCutoffDate must be a valid date' });
-    if (payload.enableProration && (!start || !cutoff)) {
+    const openDate = normalizeDateInput(payload.openDate);
+    if ((payload.openDate?.trim() ?? '') && !openDate) {
+      return res.status(400).json({ error: 'openDate must be a valid YYYY-MM-DD date' });
+    }
+    const closeDate = normalizeDateInput(payload.closeDate);
+    if ((payload.closeDate?.trim() ?? '') && !closeDate) {
+      return res.status(400).json({ error: 'closeDate must be a valid YYYY-MM-DD date' });
+    }
+    const effectiveDate = normalizeDateInput(payload.effectiveDate);
+    if ((payload.effectiveDate?.trim() ?? '') && !effectiveDate) {
+      return res.status(400).json({ error: 'effectiveDate must be a valid YYYY-MM-DD date' });
+    }
+    const prorationStartDate = normalizeDateInput(payload.prorationStartDate);
+    if ((payload.prorationStartDate?.trim() ?? '') && !prorationStartDate)
+      return res.status(400).json({ error: 'prorationStartDate must be a valid YYYY-MM-DD date' });
+    const eligibilityCutoffDate = normalizeDateInput(payload.eligibilityCutoffDate);
+    if ((payload.eligibilityCutoffDate?.trim() ?? '') && !eligibilityCutoffDate)
+      return res.status(400).json({ error: 'eligibilityCutoffDate must be a valid YYYY-MM-DD date' });
+
+    if (payload.enableProration && (!prorationStartDate || !eligibilityCutoffDate)) {
       return res
         .status(400)
         .json({
@@ -149,7 +174,7 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
             'prorationStartDate and eligibilityCutoffDate are required when proration is enabled'
         });
     }
-    if (start && cutoff && start >= cutoff) {
+    if (prorationStartDate && eligibilityCutoffDate && prorationStartDate >= eligibilityCutoffDate) {
       return res
         .status(400)
         .json({
@@ -164,19 +189,19 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
       );
       const result = await pool.query(
         `UPDATE merit_cycles
-         SET name = $1, type = $2, open_date = NULLIF($3,''), close_date = NULLIF($4,''), effective_date = NULLIF($5,''),
+         SET name = $1, type = $2, open_date = $3::date, close_date = $4::date, effective_date = $5::date,
              total_payroll = $6, budget_pct = $7, budget_total = $8, guideline_min = $9, guideline_max = $10,
              merit_budget_percent = $11, bonus_budget_percent = $12, guideline_max_percent = $13,
              min_tenure_days = $14, allow_eligibility_override = $15, enable_proration = $16,
-             proration_start_date = NULLIF($17,''), eligibility_cutoff_date = NULLIF($18,''),
+             proration_start_date = $17::date, eligibility_cutoff_date = $18::date,
              status = $19, updated_at = NOW()
          WHERE id = $20 RETURNING ${projection}`,
         [
           payload.name,
           payload.type,
-          payload.openDate ?? '',
-          payload.closeDate ?? '',
-          payload.effectiveDate ?? '',
+          openDate,
+          closeDate,
+          effectiveDate,
           totalPayroll,
           meritBudgetPercent,
           budgetTotal,
@@ -211,14 +236,14 @@ cycleRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
 
     const result = await pool.query(
       `INSERT INTO merit_cycles (name, type, open_date, close_date, effective_date, total_payroll, budget_pct, budget_total, guideline_min, guideline_max, merit_budget_percent, bonus_budget_percent, guideline_max_percent, min_tenure_days, allow_eligibility_override, enable_proration, proration_start_date, eligibility_cutoff_date, status)
-       VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NULLIF($17,''), NULLIF($18,''), $19)
+       VALUES ($1, $2, $3::date, $4::date, $5::date, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::date, $18::date, $19)
        RETURNING ${projection}`,
       [
         payload.name,
         payload.type,
-        payload.openDate ?? '',
-        payload.closeDate ?? '',
-        payload.effectiveDate ?? '',
+        openDate,
+        closeDate,
+        effectiveDate,
         totalPayroll,
         meritBudgetPercent,
         budgetTotal,

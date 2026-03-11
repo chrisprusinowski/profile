@@ -91,6 +91,18 @@ export function Admin({
     return roundTo(Math.max(0, Number(value) || 0));
   }
 
+  function isIsoDate(value?: string | null) {
+    if (!value || !value.trim()) return true;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [y, m, d] = value.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return (
+      dt.getUTCFullYear() === y &&
+      dt.getUTCMonth() + 1 === m &&
+      dt.getUTCDate() === d
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -267,6 +279,36 @@ export function Admin({
     }
     if (form.minTenureDays < 0) {
       const msg = 'Minimum tenure days cannot be negative';
+      setFormError(msg);
+      showToast(msg);
+      return false;
+    }
+    if (!isIsoDate(form.openDate)) {
+      const msg = 'Open date must be a valid YYYY-MM-DD date';
+      setFormError(msg);
+      showToast(msg);
+      return false;
+    }
+    if (!isIsoDate(form.closeDate)) {
+      const msg = 'Close date must be a valid YYYY-MM-DD date';
+      setFormError(msg);
+      showToast(msg);
+      return false;
+    }
+    if (!isIsoDate(form.effectiveDate)) {
+      const msg = 'Effective date must be a valid YYYY-MM-DD date';
+      setFormError(msg);
+      showToast(msg);
+      return false;
+    }
+    if (!isIsoDate(form.prorationStartDate)) {
+      const msg = 'Proration start date must be a valid YYYY-MM-DD date';
+      setFormError(msg);
+      showToast(msg);
+      return false;
+    }
+    if (!isIsoDate(form.eligibilityCutoffDate)) {
+      const msg = 'Eligibility cutoff date must be a valid YYYY-MM-DD date';
       setFormError(msg);
       showToast(msg);
       return false;
