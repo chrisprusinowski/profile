@@ -18,6 +18,11 @@ type ApiResponse<T> = {
 };
 
 export type CsvImportSummary = {
+  rowsReceived: number;
+  rowsValid: number;
+  rowsInserted: number;
+  rowsUpdated: number;
+  rowsRejected: number;
   rowsProcessed: number;
   inserted: number;
   updated: number;

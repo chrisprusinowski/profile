@@ -226,7 +226,14 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     try {
       const summary = await importEmployeesCsv({ csvContent });
       setImportSummary(summary);
-      showToast(`CSV import complete: ${summary.inserted} inserted, ${summary.updated} updated`);
+
+      const persisted = summary.rowsInserted + summary.rowsUpdated;
+      if (persisted === 0) {
+        showToast(`CSV import warning: no rows persisted (${summary.rowsRejected} rejected)`);
+        return;
+      }
+
+      showToast(`CSV import complete: ${summary.rowsInserted} inserted, ${summary.rowsUpdated} updated`);
       await refreshAll();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'CSV import failed');
@@ -323,7 +330,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
             <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={handleImportFromPaste} disabled={importing}>{importing ? 'Importing…' : 'Import CSV to PostgreSQL'}</button></div>
             {importSummary && (
               <div style={{ marginTop: 10, fontSize: 13 }}>
-                <div>Processed {importSummary.rowsProcessed} • Inserted {importSummary.inserted} • Updated {importSummary.updated} • Rejected {importSummary.rejected}</div>
+                <div>Received {importSummary.rowsReceived} • Valid {importSummary.rowsValid} • Inserted {importSummary.rowsInserted} • Updated {importSummary.rowsUpdated} • Rejected {importSummary.rowsRejected}</div>
                 {importSummary.validationErrors.length > 0 && (
                   <div style={{ marginTop: 6, color: 'var(--red-600)' }}>
                     First errors: {importSummary.validationErrors.slice(0, 3).map((e) => `row ${e.row}: ${e.error}`).join(' | ')}
