@@ -1,0 +1,32 @@
+[
+  {
+    "name": "percent merit path",
+    "input": {
+      "salary": 100000,
+      "rangeMid": 100000,
+      "newRangeMid": 110000,
+      "bonusTargetPercent": 10,
+      "meritIncreaseAmount": null,
+      "meritIncreasePercent": 5,
+      "recommendedMeritAmount": 4000,
+      "recommendedMeritPercent": null,
+      "promotionIncreaseAmount": 2000,
+      "bonusOverrideAmount": null,
+      "bonusOverridePercent": null,
+      "bonusWeightCompany": 0.5,
+      "bonusWeightIndividual": 0.5,
+      "goalAttainmentCompany": 120,
+      "goalAttainmentIndividual": 100
+    },
+    "expected": {
+      "meritAmount": 5000,
+      "meritPercent": 5,
+      "proration": 1,
+      "compaRatio": 1,
+      "salaryAfterMerit": 105000,
+      "bonusTargetAmount": 10000,
+      "finalBonus": 11000,
+      "promotionAdjustedSalary": 107000
+    }
+  }
+]

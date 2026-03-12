@@ -138,6 +138,7 @@ export interface CompensationTotalSummaryRow {
   enteredGoalAttainmentIndividual: number | null;
   enteredExecReview: string | null;
   enteredNotes: string | null;
+  enteredPlanningStatus: PlannerWorkflowStatus | null;
   enteredPlannerInputs: Record<string, unknown> | null;
   derivedCompaRatio: number | null;
   derivedSalaryAfterMerit: number | null;
@@ -151,6 +152,24 @@ export interface CompensationTotalSummaryRow {
   derivedGapFlags: string[] | null;
   derivedMissingDataReasons: string[] | null;
   derivedGeneratedAt: string | null;
+}
+
+export type PlannerWorkflowStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'manager_submitted'
+  | 'exec_reviewed'
+  | 'finalized';
+
+export interface PlannerAuditChange {
+  id: number;
+  cycleId: number;
+  employeeId: string;
+  fieldName: string;
+  oldValue: unknown;
+  newValue: unknown;
+  changedBy: string;
+  changedAt: string;
 }
 
 export interface EmployeeCyclePlanPayload {

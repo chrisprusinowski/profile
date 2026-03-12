@@ -39,6 +39,102 @@ const planSchema = z.object({
   notes: z.string().optional().nullable(),
   plannerInputs: z.record(z.any()).optional().nullable()
 });
+
+const plannerStatusValues = ['not_started', 'in_progress', 'manager_submitted', 'exec_reviewed', 'finalized'] as const;
+
+const plannerStatusSchema = z.enum(plannerStatusValues);
+
+const bulkPlanSchema = z.object({
+  employeeIds: z.array(z.string()).optional(),
+  filters: z.object({
+    department: z.string().optional(),
+    manager: z.string().optional(),
+    location: z.string().optional(),
+    businessEntity: z.string().optional(),
+    promotionOnly: z.boolean().optional(),
+    missingDataOnly: z.boolean().optional()
+  }).optional(),
+  updates: planSchema.pick({
+    meritIncreasePercent: true,
+    currentPerformanceRating: true,
+    goalAttainmentCompany: true,
+    goalAttainmentIndividual: true,
+    isPromotion: true
+  }).refine((value) => Object.values(value).some((v) => v !== undefined), { message: 'At least one update field is required' })
+});
+
+
+type PlanRecord = {
+  priorPerformanceRating: string | null;
+  currentPerformanceRating: string | null;
+  meritIncreaseAmount: number | null;
+  meritIncreasePercent: number | null;
+  recommendedMeritAmount: number | null;
+  recommendedMeritPercent: number | null;
+  varianceFromRecommendation: number | null;
+  isPromotion: boolean | null;
+  promotionType: string | null;
+  newJobTitle: string | null;
+  promotionRationale: string | null;
+  promotionIncreaseAmount: number | null;
+  bonusOverrideAmount: number | null;
+  bonusOverridePercent: number | null;
+  bonusWeightCompany: number | null;
+  bonusWeightIndividual: number | null;
+  goalAttainmentCompany: number | null;
+  goalAttainmentIndividual: number | null;
+  execReview: string | null;
+  notes: string | null;
+  planningStatus: string | null;
+};
+
+const trackedPlanFields: Array<keyof PlanRecord> = [
+  'priorPerformanceRating',
+  'currentPerformanceRating',
+  'meritIncreaseAmount',
+  'meritIncreasePercent',
+  'recommendedMeritAmount',
+  'recommendedMeritPercent',
+  'varianceFromRecommendation',
+  'isPromotion',
+  'promotionType',
+  'newJobTitle',
+  'promotionRationale',
+  'promotionIncreaseAmount',
+  'bonusOverrideAmount',
+  'bonusOverridePercent',
+  'bonusWeightCompany',
+  'bonusWeightIndividual',
+  'goalAttainmentCompany',
+  'goalAttainmentIndividual',
+  'execReview',
+  'notes',
+  'planningStatus'
+];
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+async function writePlanAudit(
+  cycleId: number,
+  employeeId: string,
+  oldPlan: Partial<PlanRecord>,
+  newPlan: Partial<PlanRecord>,
+  changedBy: string
+): Promise<void> {
+  for (const field of trackedPlanFields) {
+    const oldValue = oldPlan[field] ?? null;
+    const newValue = newPlan[field] ?? null;
+    if (sameValue(oldValue, newValue)) continue;
+    await pool.query(
+      `INSERT INTO planner_change_audit (
+        cycle_id, employee_id, field_name, old_value, new_value, changed_by
+      ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)`,
+      [cycleId, employeeId, field, JSON.stringify(oldValue), JSON.stringify(newValue), changedBy]
+    );
+  }
+}
 function toCsvCell(value: unknown): string {
   if (value === null || value === undefined) return '';
   const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
@@ -77,6 +173,7 @@ const TOTAL_SUMMARY_COLUMNS = [
   'enteredGoalAttainmentIndividual',
   'enteredExecReview',
   'enteredNotes',
+  'enteredPlanningStatus',
   'enteredPlannerInputs',
   'derivedCompaRatio',
   'derivedSalaryAfterMerit',
@@ -285,6 +382,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req, res, next) =>
               p.goal_attainment_individual::float AS "goalAttainmentIndividual",
               p.exec_review AS "execReview",
               p.notes,
+              p.planning_status AS "planningStatus",
               p.planner_inputs AS "plannerInputs"
        FROM employees e
        LEFT JOIN employee_cycle_plans p
@@ -301,12 +399,38 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
   if (!requireRole(req, res, ['admin', 'manager'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
-    const employeeId = req.params.employeeId;
+    const employeeId = String(req.params.employeeId);
     const parsed = planSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
     }
     const payload = parsed.data;
+    const prior = await pool.query(
+      `SELECT prior_performance_rating AS "priorPerformanceRating",
+              current_performance_rating AS "currentPerformanceRating",
+              merit_increase_amount::float AS "meritIncreaseAmount",
+              merit_increase_percent::float AS "meritIncreasePercent",
+              recommended_merit_amount::float AS "recommendedMeritAmount",
+              recommended_merit_percent::float AS "recommendedMeritPercent",
+              variance_from_recommendation::float AS "varianceFromRecommendation",
+              is_promotion AS "isPromotion",
+              promotion_type AS "promotionType",
+              new_job_title AS "newJobTitle",
+              promotion_rationale AS "promotionRationale",
+              promotion_increase_amount::float AS "promotionIncreaseAmount",
+              bonus_override_amount::float AS "bonusOverrideAmount",
+              bonus_override_percent::float AS "bonusOverridePercent",
+              bonus_weight_company::float AS "bonusWeightCompany",
+              bonus_weight_individual::float AS "bonusWeightIndividual",
+              goal_attainment_company::float AS "goalAttainmentCompany",
+              goal_attainment_individual::float AS "goalAttainmentIndividual",
+              exec_review AS "execReview",
+              notes,
+              planning_status AS "planningStatus"
+       FROM employee_cycle_plans
+       WHERE cycle_id = $1 AND employee_id = $2`,
+      [cycleId, employeeId]
+    );
     const result = await pool.query(
       `INSERT INTO employee_cycle_plans (
         cycle_id, employee_id,
@@ -319,7 +443,7 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
         bonus_override_amount, bonus_override_percent,
         bonus_weight_company, bonus_weight_individual,
         goal_attainment_company, goal_attainment_individual,
-        exec_review, notes, planner_inputs,
+        exec_review, notes, planning_status, planner_inputs,
         updated_at
       ) VALUES (
         $1, $2,
@@ -332,7 +456,7 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
         $15, $16,
         $17, $18,
         $19, $20,
-        $21, $22, $23::jsonb,
+        $21, $22, $23, $24::jsonb,
         NOW()
       )
       ON CONFLICT (cycle_id, employee_id)
@@ -357,6 +481,7 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
         goal_attainment_individual = EXCLUDED.goal_attainment_individual,
         exec_review = EXCLUDED.exec_review,
         notes = EXCLUDED.notes,
+        planning_status = COALESCE(EXCLUDED.planning_status, employee_cycle_plans.planning_status),
         planner_inputs = EXCLUDED.planner_inputs,
         updated_at = NOW()
       RETURNING *`,
@@ -383,15 +508,172 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
         payload.goalAttainmentIndividual ?? null,
         payload.execReview ?? null,
         payload.notes ?? null,
+        null,
         JSON.stringify(payload.plannerInputs ?? {})
       ]
     );
+    const saved = result.rows[0];
+    await writePlanAudit(cycleId, employeeId, prior.rows[0] ?? {}, {
+      priorPerformanceRating: saved?.prior_performance_rating ?? null,
+      currentPerformanceRating: saved?.current_performance_rating ?? null,
+      meritIncreaseAmount: saved?.merit_increase_amount ?? null,
+      meritIncreasePercent: saved?.merit_increase_percent ?? null,
+      recommendedMeritAmount: saved?.recommended_merit_amount ?? null,
+      recommendedMeritPercent: saved?.recommended_merit_percent ?? null,
+      varianceFromRecommendation: saved?.variance_from_recommendation ?? null,
+      isPromotion: saved?.is_promotion ?? null,
+      promotionType: saved?.promotion_type ?? null,
+      newJobTitle: saved?.new_job_title ?? null,
+      promotionRationale: saved?.promotion_rationale ?? null,
+      promotionIncreaseAmount: saved?.promotion_increase_amount ?? null,
+      bonusOverrideAmount: saved?.bonus_override_amount ?? null,
+      bonusOverridePercent: saved?.bonus_override_percent ?? null,
+      bonusWeightCompany: saved?.bonus_weight_company ?? null,
+      bonusWeightIndividual: saved?.bonus_weight_individual ?? null,
+      goalAttainmentCompany: saved?.goal_attainment_company ?? null,
+      goalAttainmentIndividual: saved?.goal_attainment_individual ?? null,
+      execReview: saved?.exec_review ?? null,
+      notes: saved?.notes ?? null,
+      planningStatus: saved?.planning_status ?? null
+    }, req.user?.email ?? 'unknown');
     await regenerateOutputsForCycle(cycleId);
-    res.json({ data: result.rows[0] });
+    res.json({ data: saved });
   } catch (error) {
     next(error);
   }
 });
+
+compensationCyclesRouter.post('/cycles/:cycleId/plans/bulk', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager'])) return;
+  try {
+    const cycleId = Number(req.params.cycleId);
+    const parsed = bulkPlanSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    }
+    const { employeeIds, filters, updates } = parsed.data;
+    const clauses = ['1=1'];
+    const values: Array<string | number | boolean> = [cycleId];
+    if (employeeIds && employeeIds.length > 0) {
+      values.push(employeeIds as unknown as string);
+      clauses.push(`e.id = ANY($${values.length}::text[])`);
+    }
+    if (filters?.department) {
+      values.push(filters.department);
+      clauses.push(`e.department = $${values.length}`);
+    }
+    if (filters?.manager) {
+      values.push(filters.manager);
+      clauses.push(`(e.manager = $${values.length} OR e.manager_email = $${values.length})`);
+    }
+    if (filters?.location) {
+      values.push(filters.location);
+      clauses.push(`COALESCE(e.raw_attributes->>'location', '') = $${values.length}`);
+    }
+    if (filters?.businessEntity) {
+      values.push(filters.businessEntity);
+      clauses.push(`e.business_entity = $${values.length}`);
+    }
+
+    const targets = await pool.query(
+      `SELECT e.id AS "employeeId"
+       FROM employees e
+       LEFT JOIN employee_cycle_plans p ON p.cycle_id = $1 AND p.employee_id = e.id
+       LEFT JOIN employee_comp_outputs o ON o.cycle_id = $1 AND o.employee_id = e.id
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY e.id`,
+      values
+    );
+
+    const updatedEmployeeIds: string[] = [];
+    for (const target of targets.rows) {
+      const employeeId = target.employeeId as string;
+      await pool.query(
+        `INSERT INTO employee_cycle_plans (cycle_id, employee_id, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (cycle_id, employee_id) DO NOTHING`,
+        [cycleId, employeeId]
+      );
+      const setParts: string[] = [];
+      const setValues: Array<string | number | boolean | null> = [cycleId, employeeId];
+      const pushSet = (col: string, value: unknown) => {
+        setValues.push((value as string | number | boolean | null) ?? null);
+        setParts.push(`${col} = $${setValues.length}`);
+      };
+      if (updates.meritIncreasePercent !== undefined) pushSet('merit_increase_percent', updates.meritIncreasePercent);
+      if (updates.currentPerformanceRating !== undefined) pushSet('current_performance_rating', updates.currentPerformanceRating);
+      if (updates.goalAttainmentCompany !== undefined) pushSet('goal_attainment_company', updates.goalAttainmentCompany);
+      if (updates.goalAttainmentIndividual !== undefined) pushSet('goal_attainment_individual', updates.goalAttainmentIndividual);
+      if (updates.isPromotion !== undefined) pushSet('is_promotion', updates.isPromotion);
+      if (setParts.length === 0) continue;
+      setParts.push('updated_at = NOW()');
+      await pool.query(
+        `UPDATE employee_cycle_plans SET ${setParts.join(', ')} WHERE cycle_id = $1 AND employee_id = $2`,
+        setValues
+      );
+      updatedEmployeeIds.push(employeeId);
+    }
+
+    await regenerateOutputsForCycle(cycleId);
+    res.json({ data: { updated: updatedEmployeeIds.length, employeeIds: updatedEmployeeIds } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId/status', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  try {
+    const cycleId = Number(req.params.cycleId);
+    const employeeId = String(req.params.employeeId);
+    const parsed = z.object({ status: plannerStatusSchema }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    }
+    await pool.query(
+      `INSERT INTO employee_cycle_plans (cycle_id, employee_id, planning_status, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (cycle_id, employee_id)
+       DO UPDATE SET planning_status = EXCLUDED.planning_status, updated_at = NOW()`,
+      [cycleId, employeeId, parsed.data.status]
+    );
+    await pool.query(
+      `INSERT INTO planner_change_audit (cycle_id, employee_id, field_name, old_value, new_value, changed_by)
+       VALUES ($1, $2, 'planningStatus', NULL, to_jsonb($3::text), $4)`,
+      [cycleId, employeeId, parsed.data.status, req.user?.email ?? 'unknown']
+    );
+    res.json({ data: { employeeId, status: parsed.data.status } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+compensationCyclesRouter.get('/cycles/:cycleId/plans/:employeeId/audit', async (req, res, next) => {
+  try {
+    const cycleId = Number(req.params.cycleId);
+    const employeeId = String(req.params.employeeId);
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 25), 1), 200);
+    const result = await pool.query(
+      `SELECT id,
+              cycle_id AS "cycleId",
+              employee_id AS "employeeId",
+              field_name AS "fieldName",
+              old_value AS "oldValue",
+              new_value AS "newValue",
+              changed_by AS "changedBy",
+              changed_at AS "changedAt"
+       FROM planner_change_audit
+       WHERE cycle_id = $1 AND employee_id = $2
+       ORDER BY changed_at DESC
+       LIMIT $3`,
+      [cycleId, employeeId, limit]
+    );
+    res.json({ data: result.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
 compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req, res, next) => {
   try {
     const cycleId = Number(req.params.cycleId);
@@ -455,6 +737,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/total-summary', async (req, res, 
               p.goal_attainment_individual::float AS "enteredGoalAttainmentIndividual",
               p.exec_review AS "enteredExecReview",
               p.notes AS "enteredNotes",
+              p.planning_status AS "enteredPlanningStatus",
               p.planner_inputs AS "enteredPlannerInputs",
               o.compa_ratio::float AS "derivedCompaRatio",
               o.salary_after_merit::float AS "derivedSalaryAfterMerit",
@@ -515,6 +798,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/total-summary.csv', async (req, r
               p.goal_attainment_individual::float AS "enteredGoalAttainmentIndividual",
               p.exec_review AS "enteredExecReview",
               p.notes AS "enteredNotes",
+              p.planning_status AS "enteredPlanningStatus",
               p.planner_inputs AS "enteredPlannerInputs",
               o.compa_ratio::float AS "derivedCompaRatio",
               o.salary_after_merit::float AS "derivedSalaryAfterMerit",

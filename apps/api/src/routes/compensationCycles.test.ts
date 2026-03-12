@@ -91,7 +91,7 @@ describe('compensationCycles router', () => {
       });
 
     expect(response.status).toBe(200);
-    const sql = String(mockQuery.mock.calls[0][0]);
+    const sql = String(mockQuery.mock.calls[1][0]);
     expect(sql).toContain('ON CONFLICT (cycle_id, employee_id)');
   });
 
@@ -175,6 +175,32 @@ describe('compensationCycles router', () => {
     expect(second.body.data[0].gapFlags).toContain('missing_salary');
   });
 
+
+
+
+  it('creates planner audit entries endpoint response', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ id: 10, cycleId: 1, employeeId: 'E1', fieldName: 'meritIncreasePercent', oldValue: 1, newValue: 2, changedBy: 'admin@demo.com', changedAt: '2026-01-01' }],
+      rowCount: 1
+    });
+
+    const app = await makeApp();
+    const response = await request(app).get('/api/v1/compensation/cycles/1/plans/E1/audit');
+    expect(response.status).toBe(200);
+    expect(response.body.data[0].fieldName).toBe('meritIncreasePercent');
+  });
+
+  it('updates plan workflow status', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+    const app = await makeApp();
+    const response = await request(app)
+      .put('/api/v1/compensation/cycles/1/plans/E1/status')
+      .send({ status: 'manager_submitted' });
+    expect(response.status).toBe(200);
+  });
 
   it('exports total-summary CSV with stable columns', async () => {
     mockQuery
