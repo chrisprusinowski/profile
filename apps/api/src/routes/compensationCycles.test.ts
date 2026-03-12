@@ -174,4 +174,23 @@ describe('compensationCycles router', () => {
     expect(first.body.data[0].gapFlags).toContain('missing_salary');
     expect(second.body.data[0].gapFlags).toContain('missing_salary');
   });
+
+
+  it('exports total-summary CSV with stable columns', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ employeeId: 'E1', importedFullName: 'Alex Doe', derivedGapFlags: ['missing_salary'] }],
+        rowCount: 1
+      });
+
+    const app = await makeApp();
+    const response = await request(app).get('/api/v1/compensation/cycles/1/total-summary.csv');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('text/csv');
+    expect(response.text).toContain('employeeId,importBatchId,importedFirstName');
+    expect(response.text).toContain('E1');
+    expect(response.text).toContain('"[""missing_salary""]"');
+  });
 });

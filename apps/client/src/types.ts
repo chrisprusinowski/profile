@@ -97,3 +97,81 @@ export interface AppUser {
   managerEmail?: string | null;
   isActive: boolean;
 }
+
+export interface CompensationCycle {
+  id: number;
+  name: string;
+  status: string | null;
+  cycleType: string | null;
+  openDate: string | null;
+  closeDate: string | null;
+  effectiveDate: string | null;
+}
+
+export interface CompensationTotalSummaryRow {
+  employeeId: string;
+  importBatchId: number | null;
+  importedFirstName: string | null;
+  importedLastName: string | null;
+  importedFullName: string | null;
+  importedDepartment: string | null;
+  importedTitle: string | null;
+  importedSalary: number | null;
+  importedRawAttributes: Record<string, unknown> | null;
+  enteredCurrentPerformanceRating: string | null;
+  enteredPriorPerformanceRating: string | null;
+  enteredMeritIncreaseAmount: number | null;
+  enteredMeritIncreasePercent: number | null;
+  enteredRecommendedMeritAmount: number | null;
+  enteredRecommendedMeritPercent: number | null;
+  enteredVarianceFromRecommendation: number | null;
+  enteredIsPromotion: boolean | null;
+  enteredPromotionType: string | null;
+  enteredNewJobTitle: string | null;
+  enteredPromotionRationale: string | null;
+  enteredPromotionIncreaseAmount: number | null;
+  enteredBonusOverrideAmount: number | null;
+  enteredBonusOverridePercent: number | null;
+  enteredBonusWeightCompany: number | null;
+  enteredBonusWeightIndividual: number | null;
+  enteredGoalAttainmentCompany: number | null;
+  enteredGoalAttainmentIndividual: number | null;
+  enteredExecReview: string | null;
+  enteredNotes: string | null;
+  enteredPlannerInputs: Record<string, unknown> | null;
+  derivedCompaRatio: number | null;
+  derivedSalaryAfterMerit: number | null;
+  derivedFinalSalaryWithPromo: number | null;
+  derivedCurrentBonusTargetAmount: number | null;
+  derivedFinalCompanyBonusProrated: number | null;
+  derivedFinalIndividualBonusProrated: number | null;
+  derivedFinalTotalBonusProrated: number | null;
+  derivedNewRangeCompaRatio: number | null;
+  derivedVarianceFromRecommendation: number | null;
+  derivedGapFlags: string[] | null;
+  derivedMissingDataReasons: string[] | null;
+  derivedGeneratedAt: string | null;
+}
+
+export interface EmployeeCyclePlanPayload {
+  priorPerformanceRating: string | null;
+  currentPerformanceRating: string | null;
+  meritIncreaseAmount: number | null;
+  meritIncreasePercent: number | null;
+  recommendedMeritAmount: number | null;
+  recommendedMeritPercent: number | null;
+  varianceFromRecommendation: number | null;
+  isPromotion: boolean | null;
+  promotionType: string | null;
+  newJobTitle: string | null;
+  promotionRationale: string | null;
+  promotionIncreaseAmount: number | null;
+  bonusOverrideAmount: number | null;
+  bonusOverridePercent: number | null;
+  bonusWeightCompany: number | null;
+  bonusWeightIndividual: number | null;
+  goalAttainmentCompany: number | null;
+  goalAttainmentIndividual: number | null;
+  execReview: string | null;
+  notes: string | null;
+}
