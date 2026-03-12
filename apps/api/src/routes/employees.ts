@@ -312,29 +312,56 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
     }
 
     const normalized = validateAndNormalizeRows(csvContent);
-    if (normalized.rowsProcessed === 0) {
+    const rowsReceived = normalized.rowsProcessed;
+    const rowsValid = normalized.rows.length;
+    const rowsRejected = normalized.errors.length;
+
+    if (rowsReceived === 0) {
       res.status(400).json({
         success: false,
         error: 'CSV must include header and at least one data row',
-        data: { rowsProcessed: 0, inserted: 0, updated: 0, rejected: 0, validationErrors: normalized.errors }
-      });
-      return;
-    }
-
-    if (normalized.errors.length > 0) {
-      res.status(400).json({
-        success: false,
-        error: 'CSV validation failed',
         data: {
-          rowsProcessed: normalized.rowsProcessed,
+          rowsReceived: 0,
+          rowsValid: 0,
+          rowsInserted: 0,
+          rowsUpdated: 0,
+          rowsRejected: 0,
+          rowsProcessed: 0,
           inserted: 0,
           updated: 0,
-          rejected: normalized.errors.length,
+          rejected: 0,
           validationErrors: normalized.errors
         }
       });
       return;
     }
+
+    if (rowsRejected > 0) {
+      res.status(400).json({
+        success: false,
+        error: 'CSV validation failed',
+        data: {
+          rowsReceived,
+          rowsValid,
+          rowsInserted: 0,
+          rowsUpdated: 0,
+          rowsRejected,
+          rowsProcessed: rowsReceived,
+          inserted: 0,
+          updated: 0,
+          rejected: rowsRejected,
+          validationErrors: normalized.errors
+        }
+      });
+      return;
+    }
+
+    console.info('[employees.import] Starting CSV import transaction', {
+      actorEmail: req.user?.email,
+      rowsReceived,
+      rowsValid,
+      rowsRejected
+    });
 
     let inserted = 0;
     let updated = 0;
@@ -395,16 +422,57 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
           ]
         );
 
+        if (upsertResult.rowCount !== 1) {
+          throw new Error(`Row ${row.rowNumber} upsert affected ${upsertResult.rowCount ?? 0} rows`);
+        }
+
         if (upsertResult.rows[0]?.inserted) inserted += 1;
         else updated += 1;
       }
 
       await client.query('COMMIT');
+      console.info('[employees.import] Import transaction committed', {
+        actorEmail: req.user?.email,
+        rowsReceived,
+        rowsValid,
+        rowsInserted: inserted,
+        rowsUpdated: updated,
+        rowsRejected: 0
+      });
     } catch (error) {
       await client.query('ROLLBACK');
+      console.error('[employees.import] Import transaction rolled back', {
+        actorEmail: req.user?.email,
+        rowsReceived,
+        rowsValid,
+        rowsInserted: inserted,
+        rowsUpdated: updated,
+        error: error instanceof Error ? error.message : String(error)
+      });
       throw error;
     } finally {
       client.release();
+    }
+
+    const persistedRows = inserted + updated;
+    if (persistedRows === 0) {
+      res.status(409).json({
+        success: false,
+        error: 'No employee rows were persisted',
+        data: {
+          rowsReceived,
+          rowsValid,
+          rowsInserted: inserted,
+          rowsUpdated: updated,
+          rowsRejected: rowsReceived - rowsValid,
+          rowsProcessed: rowsReceived,
+          inserted,
+          updated,
+          rejected: rowsReceived - rowsValid,
+          validationErrors: []
+        }
+      });
+      return;
     }
 
     await logAuditEvent({
@@ -413,10 +481,11 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       targetEntity: 'employees',
       targetId: 'import-csv',
       metadata: {
-        rowsProcessed: normalized.rowsProcessed,
-        inserted,
-        updated,
-        rejected: 0,
+        rowsReceived,
+        rowsValid,
+        rowsInserted: inserted,
+        rowsUpdated: updated,
+        rowsRejected: 0,
         unknownColumns: normalized.unknownColumns
       }
     });
@@ -424,7 +493,12 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
     res.json({
       success: true,
       data: {
-        rowsProcessed: normalized.rowsProcessed,
+        rowsReceived,
+        rowsValid,
+        rowsInserted: inserted,
+        rowsUpdated: updated,
+        rowsRejected: 0,
+        rowsProcessed: rowsReceived,
         inserted,
         updated,
         rejected: 0,
