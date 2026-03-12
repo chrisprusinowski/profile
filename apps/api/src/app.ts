@@ -6,6 +6,7 @@ import { recommendationsRouter } from './routes/recommendations.js';
 import { usersRouter } from './routes/users.js';
 import { payRangesRouter } from './routes/payRanges.js';
 import { exportsRouter } from './routes/exports.js';
+import { compensationCyclesRouter } from './routes/compensationCycles.js';
 import { authMiddleware } from './auth.js';
 import { handleApiError } from './errors.js';
 
@@ -45,6 +46,7 @@ export const createApp = () => {
   app.use('/api/v1/recommendations', recommendationsRouter);
   app.use('/api/v1/pay-ranges', payRangesRouter);
   app.use('/api/v1/exports', exportsRouter);
+  app.use('/api/v1/compensation', compensationCyclesRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ error: 'Not found' });
