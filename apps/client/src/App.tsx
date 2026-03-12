@@ -6,6 +6,7 @@ import { Employees } from './pages/Employees.js';
 import { Merit } from './pages/Merit.js';
 import { Admin } from './pages/Admin.js';
 import { Executive } from './pages/Executive.js';
+import { Planner } from './pages/Planner.js';
 import {
   fetchAppUsers,
   fetchCurrentUser,
@@ -222,6 +223,11 @@ export default function App() {
                 <Navigate to="/" replace />
               )
             }
+          />
+
+          <Route
+            path="/planner"
+            element={<Planner />}
           />
           <Route
             path="/executive"

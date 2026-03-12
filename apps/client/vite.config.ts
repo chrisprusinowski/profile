@@ -5,5 +5,9 @@ export default defineConfig({
   plugins: [react()],
   // GitHub Pages serves from /profile/ (repo name).
   // Override with VITE_BASE_URL env var if deploying elsewhere.
-  base: process.env.VITE_BASE_URL ?? '/'
+  base: process.env.VITE_BASE_URL ?? '/',
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test-setup.ts'
+  }
 });

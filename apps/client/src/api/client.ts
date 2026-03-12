@@ -4,7 +4,10 @@ import type {
   Employee,
   Recommendation,
   RecommendationMap,
-  PayRange
+  PayRange,
+  CompensationCycle,
+  CompensationTotalSummaryRow,
+  EmployeeCyclePlanPayload
 } from '../types.js';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
@@ -48,6 +51,82 @@ export interface AppUserRecord extends AppUser {
 const LS_CYCLE = 'mc_cycle_v2';
 const LS_RECS = 'mc_recommendations_v2';
 const ISO_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+
+function toCsvValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function escapeCsv(value: string): string {
+  if (value.includes('"') || value.includes(',') || value.includes('\n')) {
+    return `"${value.split('"').join('""')}"`;
+  }
+  return value;
+}
+
+export function buildCompensationTotalSummaryCsv(
+  rows: CompensationTotalSummaryRow[]
+): string {
+  const columns: Array<keyof CompensationTotalSummaryRow> = [
+    'employeeId',
+    'importBatchId',
+    'importedFirstName',
+    'importedLastName',
+    'importedFullName',
+    'importedDepartment',
+    'importedTitle',
+    'importedSalary',
+    'importedRawAttributes',
+    'enteredCurrentPerformanceRating',
+    'enteredPriorPerformanceRating',
+    'enteredMeritIncreaseAmount',
+    'enteredMeritIncreasePercent',
+    'enteredRecommendedMeritAmount',
+    'enteredRecommendedMeritPercent',
+    'enteredVarianceFromRecommendation',
+    'enteredIsPromotion',
+    'enteredPromotionType',
+    'enteredNewJobTitle',
+    'enteredPromotionRationale',
+    'enteredPromotionIncreaseAmount',
+    'enteredBonusOverrideAmount',
+    'enteredBonusOverridePercent',
+    'enteredBonusWeightCompany',
+    'enteredBonusWeightIndividual',
+    'enteredGoalAttainmentCompany',
+    'enteredGoalAttainmentIndividual',
+    'enteredExecReview',
+    'enteredNotes',
+    'enteredPlannerInputs',
+    'derivedCompaRatio',
+    'derivedSalaryAfterMerit',
+    'derivedFinalSalaryWithPromo',
+    'derivedCurrentBonusTargetAmount',
+    'derivedFinalCompanyBonusProrated',
+    'derivedFinalIndividualBonusProrated',
+    'derivedFinalTotalBonusProrated',
+    'derivedNewRangeCompaRatio',
+    'derivedVarianceFromRecommendation',
+    'derivedGapFlags',
+    'derivedMissingDataReasons',
+    'derivedGeneratedAt'
+  ];
+
+  const header = columns.join(',');
+  const body = rows
+    .map((row) =>
+      columns
+        .map((column) => escapeCsv(toCsvValue(row[column])))
+        .join(',')
+    )
+    .join('\n');
+
+  return `${header}\n${body}`;
+}
 
 console.info('[api.client] configured API base URL', {
   apiBaseUrl: API_BASE || '(empty)'
@@ -584,4 +663,44 @@ export async function downloadExport(
   if (!res.ok)
     throw await parseError(res, `Failed to export ${path}: ${res.status}`);
   return res.text();
+}
+
+
+export async function fetchCompensationCycles(): Promise<CompensationCycle[]> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/compensation/cycles`);
+  return readApiData<CompensationCycle[]>(
+    res,
+    `Failed to load compensation cycles: ${res.status}`
+  );
+}
+
+export async function fetchCompensationTotalSummary(
+  cycleId: number
+): Promise<CompensationTotalSummaryRow[]> {
+  requireApi();
+  const res = await authedFetch(
+    `${API_BASE}/api/v1/compensation/cycles/${cycleId}/total-summary`
+  );
+  return readApiData<CompensationTotalSummaryRow[]>(
+    res,
+    `Failed to load compensation total summary: ${res.status}`
+  );
+}
+
+export async function saveEmployeeCyclePlan(
+  cycleId: number,
+  employeeId: string,
+  payload: Partial<EmployeeCyclePlanPayload>
+): Promise<void> {
+  requireApi();
+  const res = await authedFetch(
+    `${API_BASE}/api/v1/compensation/cycles/${cycleId}/plans/${encodeURIComponent(employeeId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }
+  );
+  await readApiData(res, `Failed to save cycle plan: ${res.status}`);
 }

@@ -1115,3 +1115,67 @@ textarea {
 .row-ineligible .form-select {
   background: var(--gray-100);
 }
+
+.planner-grid-wrap {
+  overflow: auto;
+  max-height: 68vh;
+}
+
+.planner-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12px;
+}
+
+.planner-grid th,
+.planner-grid td {
+  border-bottom: 1px solid var(--gray-200);
+  border-right: 1px solid var(--gray-200);
+  background: #fff;
+  padding: 6px;
+  vertical-align: top;
+}
+
+.planner-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--gray-50);
+}
+
+.planner-grid .sticky-col {
+  position: sticky;
+  z-index: 15;
+  background: #fff;
+}
+
+.planner-grid th.sticky-col {
+  z-index: 25;
+  background: var(--gray-100);
+}
+
+.planner-grid .editable-cell {
+  background: #fcfdff;
+}
+
+.planner-grid .derived-cell {
+  background: #f9fafb;
+  color: var(--gray-700);
+}
+
+.planner-grid input,
+.planner-grid select {
+  width: 100%;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.gap-help {
+  margin-top: 4px;
+  color: var(--amber-600);
+  font-size: 11px;
+}

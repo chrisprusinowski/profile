@@ -3,11 +3,8 @@ import { z } from 'zod';
 import { requireRole, type AuthenticatedRequest } from '../auth.js';
 import { pool } from '../db.js';
 import { calculateCompensationOutputs } from '../compensationCalculations.js';
-
 export const compensationCyclesRouter = Router();
-
 const nullableNumber = z.coerce.number().finite().optional().nullable();
-
 const cycleSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   name: z.string().trim().min(1),
@@ -19,7 +16,6 @@ const cycleSchema = z.object({
   notes: z.string().optional().nullable(),
   metadata: z.record(z.any()).optional().nullable()
 });
-
 const planSchema = z.object({
   priorPerformanceRating: z.string().optional().nullable(),
   currentPerformanceRating: z.string().optional().nullable(),
@@ -43,13 +39,63 @@ const planSchema = z.object({
   notes: z.string().optional().nullable(),
   plannerInputs: z.record(z.any()).optional().nullable()
 });
-
+function toCsvCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  if (text.includes('"') || text.includes(',') || text.includes('\n')) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+const TOTAL_SUMMARY_COLUMNS = [
+  'employeeId',
+  'importBatchId',
+  'importedFirstName',
+  'importedLastName',
+  'importedFullName',
+  'importedDepartment',
+  'importedTitle',
+  'importedSalary',
+  'importedRawAttributes',
+  'enteredCurrentPerformanceRating',
+  'enteredPriorPerformanceRating',
+  'enteredMeritIncreaseAmount',
+  'enteredMeritIncreasePercent',
+  'enteredRecommendedMeritAmount',
+  'enteredRecommendedMeritPercent',
+  'enteredVarianceFromRecommendation',
+  'enteredIsPromotion',
+  'enteredPromotionType',
+  'enteredNewJobTitle',
+  'enteredPromotionRationale',
+  'enteredPromotionIncreaseAmount',
+  'enteredBonusOverrideAmount',
+  'enteredBonusOverridePercent',
+  'enteredBonusWeightCompany',
+  'enteredBonusWeightIndividual',
+  'enteredGoalAttainmentCompany',
+  'enteredGoalAttainmentIndividual',
+  'enteredExecReview',
+  'enteredNotes',
+  'enteredPlannerInputs',
+  'derivedCompaRatio',
+  'derivedSalaryAfterMerit',
+  'derivedFinalSalaryWithPromo',
+  'derivedCurrentBonusTargetAmount',
+  'derivedFinalCompanyBonusProrated',
+  'derivedFinalIndividualBonusProrated',
+  'derivedFinalTotalBonusProrated',
+  'derivedNewRangeCompaRatio',
+  'derivedVarianceFromRecommendation',
+  'derivedGapFlags',
+  'derivedMissingDataReasons',
+  'derivedGeneratedAt'
+] as const;
 const cycleProjection = `id, name, status, cycle_type AS "cycleType",
   to_char(open_date, 'YYYY-MM-DD') AS "openDate",
   to_char(close_date, 'YYYY-MM-DD') AS "closeDate",
   to_char(effective_date, 'YYYY-MM-DD') AS "effectiveDate",
   notes, metadata, created_at AS "createdAt", updated_at AS "updatedAt"`;
-
 async function regenerateOutputsForCycle(cycleId: number): Promise<number> {
   const rows = await pool.query(
     `SELECT e.id AS "employeeId",
@@ -78,7 +124,6 @@ async function regenerateOutputsForCycle(cycleId: number): Promise<number> {
      ORDER BY e.id`,
     [cycleId]
   );
-
   for (const row of rows.rows) {
     const output = calculateCompensationOutputs({
       salary: row.salary ?? null,
@@ -97,9 +142,7 @@ async function regenerateOutputsForCycle(cycleId: number): Promise<number> {
       goalAttainmentCompany: row.goalAttainmentCompany ?? null,
       goalAttainmentIndividual: row.goalAttainmentIndividual ?? null
     });
-
     const variance = row.plannerVariance ?? output.varianceFromRecommendation;
-
     await pool.query(
       `INSERT INTO employee_comp_outputs (
         cycle_id, employee_id, compa_ratio, salary_after_merit, final_salary_with_promo,
@@ -144,10 +187,8 @@ async function regenerateOutputsForCycle(cycleId: number): Promise<number> {
       ]
     );
   }
-
   return rows.rowCount ?? 0;
 }
-
 compensationCyclesRouter.get('/cycles', async (_req, res, next) => {
   try {
     const result = await pool.query(`SELECT ${cycleProjection} FROM compensation_cycles ORDER BY id DESC`);
@@ -156,19 +197,15 @@ compensationCyclesRouter.get('/cycles', async (_req, res, next) => {
     next(error);
   }
 });
-
 compensationCyclesRouter.post('/cycles', async (req: AuthenticatedRequest, res, next) => {
   if (!requireRole(req, res, ['admin'])) return;
-
   try {
     const parsed = cycleSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
     }
-
     const payload = parsed.data;
     const metadata = payload.metadata ?? {};
-
     if (payload.id) {
       const updated = await pool.query(
         `UPDATE compensation_cycles
@@ -197,7 +234,6 @@ compensationCyclesRouter.post('/cycles', async (req: AuthenticatedRequest, res, 
       );
       return res.json({ data: updated.rows[0] ?? null });
     }
-
     const inserted = await pool.query(
       `INSERT INTO compensation_cycles (
         name, status, cycle_type, open_date, close_date, effective_date, notes, metadata
@@ -215,13 +251,11 @@ compensationCyclesRouter.post('/cycles', async (req: AuthenticatedRequest, res, 
         JSON.stringify(metadata)
       ]
     );
-
     res.status(201).json({ data: inserted.rows[0] });
   } catch (error) {
     next(error);
   }
 });
-
 compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req, res, next) => {
   try {
     const cycleId = Number(req.params.cycleId);
@@ -263,19 +297,15 @@ compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req, res, next) =>
     next(error);
   }
 });
-
 compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: AuthenticatedRequest, res, next) => {
   if (!requireRole(req, res, ['admin', 'manager'])) return;
-
   try {
     const cycleId = Number(req.params.cycleId);
     const employeeId = req.params.employeeId;
     const parsed = planSchema.safeParse(req.body);
-
     if (!parsed.success) {
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
     }
-
     const payload = parsed.data;
     const result = await pool.query(
       `INSERT INTO employee_cycle_plans (
@@ -356,20 +386,16 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
         JSON.stringify(payload.plannerInputs ?? {})
       ]
     );
-
     await regenerateOutputsForCycle(cycleId);
-
     res.json({ data: result.rows[0] });
   } catch (error) {
     next(error);
   }
 });
-
 compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req, res, next) => {
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
-
     const outputs = await pool.query(
       `SELECT cycle_id AS "cycleId", employee_id AS "employeeId",
               compa_ratio::float AS "compaRatio",
@@ -390,18 +416,15 @@ compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req, res, next) 
        ORDER BY employee_id`,
       [cycleId]
     );
-
     res.json({ data: outputs.rows });
   } catch (error) {
     next(error);
   }
 });
-
 compensationCyclesRouter.get('/cycles/:cycleId/total-summary', async (req, res, next) => {
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
-
     const result = await pool.query(
       `SELECT e.id AS "employeeId",
               e.import_batch_id AS "importBatchId",
@@ -453,8 +476,73 @@ compensationCyclesRouter.get('/cycles/:cycleId/total-summary', async (req, res, 
        ORDER BY e.id`,
       [cycleId]
     );
-
     res.json({ data: result.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+compensationCyclesRouter.get('/cycles/:cycleId/total-summary.csv', async (req, res, next) => {
+  try {
+    const cycleId = Number(req.params.cycleId);
+    await regenerateOutputsForCycle(cycleId);
+    const result = await pool.query(
+      `SELECT e.id AS "employeeId",
+              e.import_batch_id AS "importBatchId",
+              e.first_name AS "importedFirstName",
+              e.last_name AS "importedLastName",
+              e.full_name AS "importedFullName",
+              e.department AS "importedDepartment",
+              e.title AS "importedTitle",
+              e.salary::float AS "importedSalary",
+              e.raw_attributes AS "importedRawAttributes",
+              p.current_performance_rating AS "enteredCurrentPerformanceRating",
+              p.prior_performance_rating AS "enteredPriorPerformanceRating",
+              p.merit_increase_amount::float AS "enteredMeritIncreaseAmount",
+              p.merit_increase_percent::float AS "enteredMeritIncreasePercent",
+              p.recommended_merit_amount::float AS "enteredRecommendedMeritAmount",
+              p.recommended_merit_percent::float AS "enteredRecommendedMeritPercent",
+              p.variance_from_recommendation::float AS "enteredVarianceFromRecommendation",
+              p.is_promotion AS "enteredIsPromotion",
+              p.promotion_type AS "enteredPromotionType",
+              p.new_job_title AS "enteredNewJobTitle",
+              p.promotion_rationale AS "enteredPromotionRationale",
+              p.promotion_increase_amount::float AS "enteredPromotionIncreaseAmount",
+              p.bonus_override_amount::float AS "enteredBonusOverrideAmount",
+              p.bonus_override_percent::float AS "enteredBonusOverridePercent",
+              p.bonus_weight_company::float AS "enteredBonusWeightCompany",
+              p.bonus_weight_individual::float AS "enteredBonusWeightIndividual",
+              p.goal_attainment_company::float AS "enteredGoalAttainmentCompany",
+              p.goal_attainment_individual::float AS "enteredGoalAttainmentIndividual",
+              p.exec_review AS "enteredExecReview",
+              p.notes AS "enteredNotes",
+              p.planner_inputs AS "enteredPlannerInputs",
+              o.compa_ratio::float AS "derivedCompaRatio",
+              o.salary_after_merit::float AS "derivedSalaryAfterMerit",
+              o.final_salary_with_promo::float AS "derivedFinalSalaryWithPromo",
+              o.current_bonus_target_amount::float AS "derivedCurrentBonusTargetAmount",
+              o.final_company_bonus_prorated::float AS "derivedFinalCompanyBonusProrated",
+              o.final_individual_bonus_prorated::float AS "derivedFinalIndividualBonusProrated",
+              o.final_total_bonus_prorated::float AS "derivedFinalTotalBonusProrated",
+              o.new_range_compa_ratio::float AS "derivedNewRangeCompaRatio",
+              o.variance_from_recommendation::float AS "derivedVarianceFromRecommendation",
+              o.gap_flags AS "derivedGapFlags",
+              o.missing_data_reasons AS "derivedMissingDataReasons",
+              o.generated_at AS "derivedGeneratedAt"
+       FROM employees e
+       LEFT JOIN employee_cycle_plans p
+         ON p.employee_id = e.id AND p.cycle_id = $1
+       LEFT JOIN employee_comp_outputs o
+         ON o.employee_id = e.id AND o.cycle_id = $1
+       ORDER BY e.id`,
+      [cycleId]
+    );
+    const header = TOTAL_SUMMARY_COLUMNS.join(',');
+    const body = result.rows
+      .map((row) => TOTAL_SUMMARY_COLUMNS.map((column) => toCsvCell(row[column])).join(','))
+      .join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="compensation-total-summary-${cycleId}.csv"`);
+    res.send(`${header}\n${body}`);
   } catch (error) {
     next(error);
   }

@@ -43,6 +43,7 @@ export function Layout({ cycle, flaggedCount = 0, currentUser, onSwitchUser, chi
             {flaggedCount > 0 && <span className="nav-badge">{flaggedCount}</span>}
           </NavLink>
           <NavLink to="/employees" className={navClass}><span className="nav-icon">◎</span> Employee Roster</NavLink>
+          <NavLink to="/planner" className={navClass}><span className="nav-icon">▦</span> Cycle Planner</NavLink>
           <div className="nav-section-label">Reports</div>
           <NavLink to="/executive" className={navClass}><span className="nav-icon">◈</span> Executive Summary</NavLink>
           {currentUser.role === 'admin' && (
