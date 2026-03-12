@@ -47,6 +47,10 @@ const LS_CYCLE = 'mc_cycle_v2';
 const LS_RECS = 'mc_recommendations_v2';
 const ISO_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+console.info('[api.client] configured API base URL', {
+  apiBaseUrl: API_BASE || '(empty)'
+});
+
 const DEFAULT_CYCLE: Cycle = {
   name: '2026 Annual Merit Cycle',
   type: 'merit',
@@ -164,6 +168,20 @@ async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
 async function readApiData<T>(res: Response, fallback: string): Promise<T> {
   if (!res.ok) throw await parseError(res, fallback);
   const body = (await res.json()) as ApiResponse<T> | T;
+
+  if (
+    typeof body === 'object' &&
+    body !== null &&
+    'success' in body &&
+    body.success === false
+  ) {
+    const apiError =
+      ('error' in body && typeof body.error === 'string' && body.error) ||
+      ('message' in body && typeof body.message === 'string' && body.message) ||
+      fallback;
+    throw new Error(apiError);
+  }
+
   if (
     typeof body === 'object' &&
     body !== null &&

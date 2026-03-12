@@ -116,6 +116,21 @@ async function loadPayRanges(): Promise<PayRangeRecord[]> {
   return result.rows;
 }
 
+async function loadDbTargetInfo() {
+  const result = await pool.query<{
+    databaseName: string;
+    schemaName: string;
+  }>(
+    `SELECT current_database() AS "databaseName",
+            current_schema() AS "schemaName"`
+  );
+  return {
+    databaseName: result.rows[0]?.databaseName ?? 'unknown',
+    schemaName: result.rows[0]?.schemaName ?? 'unknown',
+    tableName: 'employees'
+  };
+}
+
 async function fetchEmployeesFromDb(
   managerScopeName: string | null,
   managerScopeEmail: string | null
@@ -166,9 +181,22 @@ async function fetchEmployeesFromDb(
 
 employeesRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
+    const dbTarget = await loadDbTargetInfo();
+    console.info('[employees.roster] Route hit', {
+      actorEmail: req.user?.email,
+      dbTarget
+    });
+
     const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
       getEffectiveManagerScope(req.user!);
     const employees = await fetchEmployeesFromDb(managerScopeName, managerScopeEmail);
+
+    console.info('[employees.roster] Query completed', {
+      actorEmail: req.user?.email,
+      table: `${dbTarget.schemaName}.${dbTarget.tableName}`,
+      rowCount: employees.length
+    });
+
     res.json({ success: true, data: employees });
   } catch (error) {
     next(error);
@@ -301,6 +329,10 @@ employeesRouter.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
 employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next) => {
   if (!requireRole(req, res, ['admin'])) return;
   try {
+    console.info('[employees.import] Route hit', {
+      actorEmail: req.user?.email
+    });
+
     let csvContent = '';
     if (typeof req.body?.csvContent === 'string' && req.body.csvContent.trim()) {
       csvContent = req.body.csvContent;
@@ -360,7 +392,8 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       actorEmail: req.user?.email,
       rowsReceived,
       rowsValid,
-      rowsRejected
+      rowsRejected,
+      dbTarget: await loadDbTargetInfo()
     });
 
     let inserted = 0;
