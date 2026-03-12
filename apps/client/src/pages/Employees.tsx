@@ -87,6 +87,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [importText, setImportText] = useState('');
+  const [importFileName, setImportFileName] = useState('');
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState<CsvImportSummary | null>(null);
 
@@ -214,16 +215,16 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     }
   }
 
-  async function handleImportCsv() {
-    if (!importText.trim()) {
-      showToast('Paste CSV content first');
+  async function handleImportCsv(csvContent: string) {
+    if (!csvContent.trim()) {
+      showToast('Paste CSV content or upload a CSV file first');
       return;
     }
 
     setImporting(true);
     setImportSummary(null);
     try {
-      const summary = await importEmployeesCsv({ csvContent: importText });
+      const summary = await importEmployeesCsv({ csvContent });
       setImportSummary(summary);
       showToast(`CSV import complete: ${summary.inserted} inserted, ${summary.updated} updated`);
       await refreshAll();
@@ -231,6 +232,26 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
       showToast(err instanceof Error ? err.message : 'CSV import failed');
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleImportFromPaste() {
+    await handleImportCsv(importText);
+  }
+
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportFileName(file.name);
+    try {
+      const fileText = await file.text();
+      setImportText(fileText);
+      await handleImportCsv(fileText);
+    } catch {
+      showToast('Failed to read CSV file');
+    } finally {
+      event.target.value = '';
     }
   }
 
@@ -290,9 +311,16 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
         {!readOnly && <div className="card mb-20">
           <div className="card-header"><div className="card-title">Import Employees from CSV</div></div>
           <div className="card-body">
-            <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>Paste CSV (required columns: id, name, email, department, title, salary, manager, hire_date). Optional: position_type, geography, level.</p>
+            <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>Paste CSV or upload a .csv file (required columns: id, name, email, department, title, salary, manager, hire_date). Optional: position_type, geography, level.</p>
+            <div style={{ marginBottom: 10 }}>
+              <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+                Upload CSV
+                <input type="file" accept=".csv,text/csv" onChange={handleFileUpload} style={{ display: 'none' }} />
+              </label>
+              {importFileName && <span style={{ marginLeft: 8, color: 'var(--gray-500)' }}>{importFileName}</span>}
+            </div>
             <textarea className="form-input" rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="id,name,email,department,title,position_type,geography,level,salary,manager,hire_date" />
-            <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={handleImportCsv} disabled={importing}>{importing ? 'Importing…' : 'Import CSV to PostgreSQL'}</button></div>
+            <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={handleImportFromPaste} disabled={importing}>{importing ? 'Importing…' : 'Import CSV to PostgreSQL'}</button></div>
             {importSummary && (
               <div style={{ marginTop: 10, fontSize: 13 }}>
                 <div>Processed {importSummary.rowsProcessed} • Inserted {importSummary.inserted} • Updated {importSummary.updated} • Rejected {importSummary.rejected}</div>

@@ -97,6 +97,9 @@ type ErrorBody = {
     formErrors?: string[];
     fieldErrors?: Record<string, string[]>;
   } | string;
+  data?: {
+    validationErrors?: Array<{ row: number; error: string }>;
+  };
 };
 
 function flattenValidationDetails(details: ErrorBody['details']): string | null {
@@ -117,7 +120,11 @@ async function parseError(res: Response, fallback: string): Promise<Error> {
   try {
     const body = (await res.json()) as ErrorBody;
     const detailMessage = flattenValidationDetails(body.details);
-    const message = [body.message || body.error || fallback, detailMessage]
+    const rowErrors = (body.data?.validationErrors ?? [])
+      .slice(0, 5)
+      .map((err) => `Row ${err.row}: ${err.error}`)
+      .join(' | ');
+    const message = [body.message || body.error || fallback, detailMessage, rowErrors]
       .filter(Boolean)
       .join(' — ');
     return new Error(message || fallback);
