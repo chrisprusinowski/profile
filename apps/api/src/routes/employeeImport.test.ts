@@ -91,6 +91,24 @@ describe('prepareEmployeeImport', () => {
     );
   });
 
+
+  it('normalizes manager email when manager column contains an email', () => {
+    const csv = [
+      'id,name,email,department,title,salary,manager,hire_date',
+      'E77,Email Manager Person,e77@demo.com,Eng,Engineer,100000,manager@demo.com,2024-01-01'
+    ].join('\n');
+
+    const result = prepareEmployeeImport(csv);
+    expect(result.validRows).toHaveLength(1);
+    expect(result.validRows[0]).toMatchObject({
+      manager: '',
+      managerEmail: 'manager@demo.com'
+    });
+    expect(result.preview.warnings.map((warn) => warn.message)).toContain(
+      'manager looked like an email; normalized to manager_email for manager-scope visibility'
+    );
+  });
+
   it('warns when recommended fields are missing and supports missing id for UUID generation', () => {
     const csv = [
       'id,name,email,department,title,salary,manager,hire_date',

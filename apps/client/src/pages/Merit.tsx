@@ -366,7 +366,9 @@ export function Merit({
                     className="text-muted"
                     style={{ textAlign: 'center', padding: 20 }}
                   >
-                    No employees match the current filters.
+                    {employees.length === 0
+                      ? '0 employees in current cycle scope. Imported employees appear here after cycle recommendation rows are created and manager scope matches.'
+                      : 'No employees match the current filters.'}
                   </td>
                 </tr>
               )}

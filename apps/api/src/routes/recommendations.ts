@@ -104,7 +104,8 @@ async function getScopedRecommendations(
          INNER JOIN employees e ON e.id = mr.employee_id
          WHERE mr.cycle_id = $1
            AND (($2::text IS NOT NULL AND lower(e.manager) = lower($2))
-             OR ($3::text IS NOT NULL AND lower(e.manager_email) = lower($3)))`,
+             OR ($3::text IS NOT NULL AND lower(e.manager_email) = lower($3))
+             OR ($3::text IS NOT NULL AND lower(e.manager) = lower($3)))`,
           [cycleId, managerScopeName, managerScopeEmail]
         )
       : await pool.query(
@@ -133,10 +134,71 @@ async function getScopedRecommendations(
   return map;
 }
 
+async function seedMissingRecommendationsForScope(
+  cycleId: number,
+  req: AuthenticatedRequest
+) {
+  const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
+    getEffectiveManagerScope(req.user!);
+
+  const params: Array<number | string | null> = [cycleId];
+  let scopedWhere = '';
+  if (managerScopeName || managerScopeEmail) {
+    params.push(managerScopeName, managerScopeEmail);
+    scopedWhere = `AND (( $2::text IS NOT NULL AND lower(e.manager) = lower($2))
+                  OR ( $3::text IS NOT NULL AND lower(e.manager_email) = lower($3))
+                  OR ( $3::text IS NOT NULL AND lower(e.manager) = lower($3)))`;
+  }
+
+  const updatedByPlaceholder = `$${params.length + 1}`;
+  const inserted = await pool.query(
+    `INSERT INTO merit_recommendations (
+        cycle_id,
+        employee_id,
+        merit_pct,
+        merit_amount,
+        performance_rating,
+        notes,
+        status,
+        bonus_target_percent,
+        bonus_payout_percent,
+        bonus_payout_amount,
+        updated_by
+      )
+      SELECT $1,
+             e.id,
+             0,
+             0,
+             2,
+             '',
+             'Draft',
+             NULL,
+             0,
+             0,
+             lower(${updatedByPlaceholder})
+      FROM employees e
+      LEFT JOIN merit_recommendations mr
+        ON mr.cycle_id = $1
+       AND mr.employee_id = e.id
+      WHERE mr.employee_id IS NULL
+      ${scopedWhere}`,
+    [...params, req.user!.email]
+  );
+
+  if ((inserted.rowCount ?? 0) > 0) {
+    console.info('[recommendations] Seeded missing recommendation rows', {
+      actorEmail: req.user?.email,
+      cycleId,
+      inserted: inserted.rowCount
+    });
+  }
+}
+
 recommendationsRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const cycle = await getCurrentCycle();
     if (!cycle) return res.json({});
+    await seedMissingRecommendationsForScope(cycle.id, req);
     const map = await getScopedRecommendations(cycle.id, req);
     res.json(map);
   } catch (error) {
