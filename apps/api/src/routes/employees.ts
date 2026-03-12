@@ -10,6 +10,7 @@ import { pool } from '../db.js';
 import { findBestPayRange, type PayRangeRecord } from '../payRanges.js';
 import { logAuditEvent } from '../audit.js';
 import { recalculateRecommendationAmountsForEmployee } from '../recommendationCalculations.js';
+import { validateAndNormalizeRows } from './employeeImport.js';
 
 export const employeesRouter = Router();
 
@@ -29,94 +30,6 @@ const employeeSchema = z.object({
 });
 
 const employeeUpdateSchema = employeeSchema.omit({ id: true });
-
-const MINIMUM_CSV_COLUMNS = ['name', 'salary'];
-
-/** Header alias map: normalized key → canonical column name */
-const HEADER_ALIASES: Record<string, string> = {
-  // id
-  id: 'id', employeeid: 'id', empid: 'id', eid: 'id', employeenumber: 'id',
-  // name
-  name: 'name', fullname: 'name', employeename: 'name', displayname: 'name',
-  // email
-  email: 'email', emailaddress: 'email', mail: 'email', workemail: 'email', e_mail: 'email',
-  // department
-  department: 'department', dept: 'department', division: 'department', team: 'department',
-  businessunit: 'department',
-  // title
-  title: 'title', jobtitle: 'title', role: 'title', jobname: 'title',
-  // salary
-  salary: 'salary', basesalary: 'salary', annualsalary: 'salary', basepay: 'salary',
-  compensation: 'salary', pay: 'salary', wage: 'salary', currentsalary: 'salary',
-  currentsal: 'salary', currentbase: 'salary', annualbase: 'salary',
-  // manager
-  manager: 'manager', managername: 'manager', supervisor: 'manager', reportsto: 'manager',
-  mgr: 'manager', directmanager: 'manager',
-  // hire_date
-  hire_date: 'hire_date', hiredate: 'hire_date', startdate: 'hire_date',
-  dateofhire: 'hire_date', joindate: 'hire_date', datestarted: 'hire_date',
-  employmentdate: 'hire_date', start_date: 'hire_date', datehired: 'hire_date',
-  // position_type
-  position_type: 'position_type', positiontype: 'position_type', emptype: 'position_type',
-  employeetype: 'position_type', employmenttype: 'position_type',
-  // geography
-  geography: 'geography', geo: 'geography', location: 'geography', region: 'geography',
-  country: 'geography', office: 'geography', worklocation: 'geography',
-  // level
-  level: 'level', grade: 'level', band: 'level', joblevel: 'level', jobgrade: 'level',
-  careerlevel: 'level',
-  // manager_email
-  manager_email: 'manager_email', manageremail: 'manager_email', managermail: 'manager_email',
-};
-
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  result.push(current.trim());
-  return result;
-}
-
-/** Normalize a raw header string to its canonical column name via alias lookup */
-function normalizeHeader(header: string): string {
-  const key = header.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-  return HEADER_ALIASES[key] || header.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_');
-}
-
-/** Normalize salary string: strip currency symbols, commas, whitespace → number */
-function normalizeSalaryValue(raw: string): number | null {
-  if (!raw || !raw.trim()) return 0;
-  const cleaned = raw.replace(/[$€£¥,\s]/g, '');
-  if (!cleaned) return 0;
-  const n = parseFloat(cleaned);
-  if (isNaN(n) || !isFinite(n)) return null;
-  if (n < 0) return null;
-  return Math.round(n * 100) / 100;
-}
-
-/** Normalize a text field: trim and collapse multiple whitespace */
-function normalizeTextField(value: string | undefined): string {
-  if (!value) return '';
-  return value.trim().replace(/\s{2,}/g, ' ');
-}
 
 /** Parse and normalize date input to YYYY-MM-DD. Accepts ISO, US, and natural date formats. */
 function parseDateInput(value: string | undefined): string | null {
@@ -398,104 +311,60 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       return;
     }
 
-    // Strip BOM
-    csvContent = csvContent.replace(/^\uFEFF/, '');
-
-    const lines = csvContent.split(/\r?\n/).filter((line) => line.trim().length > 0);
-    if (lines.length < 2) {
-      res.status(400).json({ success: false, error: 'CSV must include header and at least one data row' });
+    const normalized = validateAndNormalizeRows(csvContent);
+    if (normalized.rowsProcessed === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'CSV must include header and at least one data row',
+        data: { rowsProcessed: 0, inserted: 0, updated: 0, rejected: 0, validationErrors: normalized.errors }
+      });
       return;
     }
 
-    const rawHeaders = parseCsvLine(lines[0]);
-    const headers = rawHeaders.map(normalizeHeader);
-
-    // Check for minimum required columns (name + salary)
-    const missingColumns = MINIMUM_CSV_COLUMNS.filter((column) => !headers.includes(column));
-    if (missingColumns.length > 0) {
-      res.status(400).json({ success: false, error: `Missing required columns: ${missingColumns.join(', ')}. Headers found: ${headers.join(', ')}` });
+    if (normalized.errors.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: 'CSV validation failed',
+        data: {
+          rowsProcessed: normalized.rowsProcessed,
+          inserted: 0,
+          updated: 0,
+          rejected: normalized.errors.length,
+          validationErrors: normalized.errors
+        }
+      });
       return;
     }
 
     let inserted = 0;
     let updated = 0;
-    let rejected = 0;
-    let autoIdCounter = 0;
-    const validationErrors: Array<{ row: number; error: string }> = [];
 
-    for (let rowIndex = 1; rowIndex < lines.length; rowIndex++) {
-      const rowNumber = rowIndex + 1;
-      const values = parseCsvLine(lines[rowIndex]);
-      const row: Record<string, string> = {};
-      headers.forEach((header, idx) => {
-        row[header] = values[idx] ?? '';
-      });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const row of normalized.rows) {
+        const validation = employeeSchema.safeParse({
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          department: row.department,
+          title: row.title,
+          positionType: row.positionType,
+          geography: row.geography,
+          level: row.level,
+          salary: row.salary,
+          manager: row.manager,
+          managerEmail: row.managerEmail,
+          hireDate: row.hireDate
+        });
 
-      // Normalize fields before validation
-      const name = normalizeTextField(row.name);
-      if (!name) {
-        rejected += 1;
-        validationErrors.push({ row: rowNumber, error: 'name is required' });
-        continue;
-      }
+        if (!validation.success) {
+          throw new Error(`Row ${row.rowNumber} schema validation failed: ${validation.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`);
+        }
 
-      // Salary normalization: handle $78,000 / 78000 / $78,000.00
-      const salaryVal = normalizeSalaryValue(row.salary || '');
-      if (salaryVal === null) {
-        rejected += 1;
-        validationErrors.push({ row: rowNumber, error: `could not parse salary "${row.salary}"` });
-        continue;
-      }
-
-      // Auto-generate ID if not provided
-      autoIdCounter++;
-      const rawId = normalizeTextField(row.id);
-      const id = rawId || `emp-import-${autoIdCounter}-${name.replace(/\s+/g, '').slice(0, 8).toLowerCase()}`;
-
-      // Date normalization
-      const hireDate = parseDateInput(row.hire_date);
-      if (row.hire_date && row.hire_date.trim() && !hireDate) {
-        validationErrors.push({ row: rowNumber, error: `could not parse hire_date "${row.hire_date}" — stored as null` });
-        // Don't reject — store with null date
-      }
-
-      // Email normalization
-      const email = (row.email || '').trim().toLowerCase();
-
-      const department = normalizeTextField(row.department);
-      const title = normalizeTextField(row.title);
-      const manager = normalizeTextField(row.manager);
-      const managerEmail = (row.manager_email || '').trim().toLowerCase();
-      const positionType = normalizeTextField(row.position_type);
-      const geography = normalizeTextField(row.geography);
-      const level = normalizeTextField(row.level);
-
-      // Validate with schema (after normalization)
-      const validation = employeeSchema.safeParse({
-        id,
-        name,
-        email,
-        department,
-        title,
-        positionType,
-        geography,
-        level,
-        salary: salaryVal,
-        manager,
-        managerEmail,
-        hireDate: hireDate || '',
-      });
-
-      if (!validation.success) {
-        rejected += 1;
-        validationErrors.push({ row: rowNumber, error: validation.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ') });
-        continue;
-      }
-
-      try {
-        const upsertResult = await pool.query(
+        const upsertResult = await client.query(
           `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, hire_date)
-           VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), $12)
+           VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), NULLIF($12, '')::date)
            ON CONFLICT (id)
            DO UPDATE SET name = EXCLUDED.name,
                          email = EXCLUDED.email,
@@ -510,31 +379,57 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
                          hire_date = EXCLUDED.hire_date,
                          updated_at = NOW()
            RETURNING xmax = 0 AS inserted`,
-          [validation.data.id, validation.data.name, validation.data.email ?? '', validation.data.department ?? '', validation.data.title ?? '', validation.data.positionType ?? '', validation.data.geography ?? '', validation.data.level ?? '', validation.data.salary, validation.data.manager ?? '', validation.data.managerEmail ?? '', hireDate],
+          [
+            validation.data.id,
+            validation.data.name,
+            validation.data.email ?? '',
+            validation.data.department ?? '',
+            validation.data.title ?? '',
+            validation.data.positionType ?? '',
+            validation.data.geography ?? '',
+            validation.data.level ?? '',
+            validation.data.salary,
+            validation.data.manager ?? '',
+            validation.data.managerEmail ?? '',
+            validation.data.hireDate ?? ''
+          ]
         );
 
-        if (upsertResult.rows[0]?.inserted) {
-          inserted += 1;
-        } else {
-          updated += 1;
-        }
-      } catch (dbError) {
-        rejected += 1;
-        const msg = dbError instanceof Error ? dbError.message : 'database error';
-        validationErrors.push({ row: rowNumber, error: `database error: ${msg}` });
+        if (upsertResult.rows[0]?.inserted) inserted += 1;
+        else updated += 1;
       }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
 
-    await logAuditEvent({ actionType: 'employee.imported', actorEmail: req.user!.email, targetEntity: 'employees', targetId: 'import-csv', metadata: { rowsProcessed: lines.length - 1, inserted, updated, rejected } });
+    await logAuditEvent({
+      actionType: 'employee.imported',
+      actorEmail: req.user!.email,
+      targetEntity: 'employees',
+      targetId: 'import-csv',
+      metadata: {
+        rowsProcessed: normalized.rowsProcessed,
+        inserted,
+        updated,
+        rejected: 0,
+        unknownColumns: normalized.unknownColumns
+      }
+    });
+
     res.json({
       success: true,
       data: {
-        rowsProcessed: lines.length - 1,
+        rowsProcessed: normalized.rowsProcessed,
         inserted,
         updated,
-        rejected,
-        validationErrors,
-      },
+        rejected: 0,
+        validationErrors: []
+      }
     });
   } catch (error) {
     next(error);
