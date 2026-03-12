@@ -17,17 +17,19 @@ type ApiResponse<T> = {
   message?: string;
 };
 
-export type CsvImportSummary = {
+export type CsvImportPreview = {
   rowsReceived: number;
   rowsValid: number;
+  rowsInvalid: number;
+  errors: Array<{ row: number; message: string }>;
+  warnings: Array<{ row: number; message: string }>;
+};
+
+export type CsvImportResult = {
+  rowsReceived: number;
   rowsInserted: number;
   rowsUpdated: number;
   rowsRejected: number;
-  rowsProcessed: number;
-  inserted: number;
-  updated: number;
-  rejected: number;
-  validationErrors: Array<{ row: number; error: string }>;
 };
 
 export type PayRangeImportSummary = {
@@ -108,6 +110,7 @@ type ErrorBody = {
   } | string;
   data?: {
     validationErrors?: Array<{ row: number; error: string }>;
+    errors?: Array<{ row: number; message: string }>;
   };
 };
 
@@ -129,9 +132,9 @@ async function parseError(res: Response, fallback: string): Promise<Error> {
   try {
     const body = (await res.json()) as ErrorBody;
     const detailMessage = flattenValidationDetails(body.details);
-    const rowErrors = (body.data?.validationErrors ?? [])
+    const rowErrors = ([...(body.data?.validationErrors ?? []).map((err) => ({ row: err.row, text: err.error })), ...((body.data?.errors ?? []).map((err) => ({ row: err.row, text: err.message })))] )
       .slice(0, 5)
-      .map((err) => `Row ${err.row}: ${err.error}`)
+      .map((err) => `Row ${err.row}: ${err.text}`)
       .join(' | ');
     const message = [body.message || body.error || fallback, detailMessage, rowErrors]
       .filter(Boolean)
@@ -300,20 +303,37 @@ export async function deleteEmployee(id: string): Promise<void> {
   );
 }
 
-export async function importEmployeesCsv(payload: {
+export async function previewEmployeesCsvImport(payload: {
   csvContent?: string;
   filePath?: string;
-}): Promise<CsvImportSummary> {
+}): Promise<CsvImportPreview> {
   requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/employees/import-csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ ...payload, action: 'preview' })
   });
 
-  return readApiData<CsvImportSummary>(
+  return readApiData<CsvImportPreview>(
     res,
-    `Failed to import employees CSV: ${res.status}`
+    `Failed to preview employees CSV import: ${res.status}`
+  );
+}
+
+export async function commitEmployeesCsvImport(payload: {
+  csvContent?: string;
+  filePath?: string;
+}): Promise<CsvImportResult> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/employees/import-csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, action: 'commit' })
+  });
+
+  return readApiData<CsvImportResult>(
+    res,
+    `Failed to commit employees CSV import: ${res.status}`
   );
 }
 

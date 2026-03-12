@@ -1,3 +1,5 @@
+import { parse } from 'csv-parse/sync';
+
 export const REQUIRED_COLUMNS = [
   'id',
   'name',
@@ -9,11 +11,11 @@ export const REQUIRED_COLUMNS = [
   'hire_date'
 ] as const;
 
+export const OPTIONAL_COLUMNS = ['position_type', 'geography', 'level'] as const;
+
 export type CanonicalEmployeeImportColumn =
   | (typeof REQUIRED_COLUMNS)[number]
-  | 'position_type'
-  | 'geography'
-  | 'level'
+  | (typeof OPTIONAL_COLUMNS)[number]
   | 'manager_email';
 
 const HEADER_ALIASES: Record<string, CanonicalEmployeeImportColumn> = {
@@ -32,12 +34,16 @@ const HEADER_ALIASES: Record<string, CanonicalEmployeeImportColumn> = {
   manageremail: 'manager_email', manager_email: 'manager_email', managermail: 'manager_email'
 };
 
-export type CsvParseResult = {
-  headers: string[];
-  rows: string[][];
-};
+const KNOWN_COLUMNS = new Set<CanonicalEmployeeImportColumn>([
+  ...REQUIRED_COLUMNS,
+  ...OPTIONAL_COLUMNS,
+  'manager_email'
+]);
 
-export type RowValidationError = { row: number; error: string };
+const RECOMMENDED_FIELDS = ['email', 'department', 'title'] as const;
+
+export type RowValidationError = { row: number; message: string };
+export type RowValidationWarning = { row: number; message: string };
 
 export type NormalizedEmployeeImportRow = {
   rowNumber: number;
@@ -55,6 +61,20 @@ export type NormalizedEmployeeImportRow = {
   level: string;
 };
 
+export type ImportPreview = {
+  rowsReceived: number;
+  rowsValid: number;
+  rowsInvalid: number;
+  errors: RowValidationError[];
+  warnings: RowValidationWarning[];
+};
+
+export type ImportPreparation = {
+  validRows: NormalizedEmployeeImportRow[];
+  preview: ImportPreview;
+  unknownColumns: string[];
+};
+
 function normalizeHeaderKey(header: string): string {
   return header.trim().toLowerCase().replace(/[\s\-_]+/g, '').replace(/[^a-z0-9]/g, '');
 }
@@ -64,60 +84,19 @@ export function toCanonicalHeader(header: string): string {
   return alias ?? header.trim().toLowerCase().replace(/[\s\-]+/g, '_');
 }
 
-export function parseCsv(text: string): CsvParseResult {
-  if (!text.trim()) return { headers: [], rows: [] };
-  const cleanedText = text.replace(/^\uFEFF/, '');
+export function parseCsv(text: string): Record<string, string>[] {
+  if (!text.trim()) return [];
+  const records = parse(text, {
+    columns: true,
+    skip_empty_lines: true,
+    bom: true,
+    relax_column_count: true,
+    trim: false
+  }) as Array<Record<string, unknown>>;
 
-  const allRows: string[][] = [];
-  let currentRow: string[] = [];
-  let currentField = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < cleanedText.length; i += 1) {
-    const char = cleanedText[i];
-    const next = cleanedText[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        currentField += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      currentRow.push(currentField.trim());
-      currentField = '';
-      continue;
-    }
-
-    if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && next === '\n') i += 1;
-      currentRow.push(currentField.trim());
-      currentField = '';
-      if (currentRow.some((value) => value.length > 0)) {
-        allRows.push(currentRow);
-      }
-      currentRow = [];
-      continue;
-    }
-
-    currentField += char;
-  }
-
-  if (currentField.length > 0 || currentRow.length > 0) {
-    currentRow.push(currentField.trim());
-    if (currentRow.some((value) => value.length > 0)) {
-      allRows.push(currentRow);
-    }
-  }
-
-  if (allRows.length === 0) return { headers: [], rows: [] };
-  const headers = allRows[0];
-  const rows = allRows.slice(1);
-  return { headers, rows };
+  return records.map((record) => Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [key, String(value ?? '')])
+  ));
 }
 
 export function normalizeText(value: string | undefined): string {
@@ -130,9 +109,9 @@ export function normalizeEmail(value: string | undefined): string {
 
 export function parseSalary(value: string | undefined): number | null {
   const raw = normalizeText(value);
-  if (!raw) return 0;
+  if (!raw) return null;
   const cleaned = raw.replace(/[,$€£¥\s]/g, '');
-  if (!cleaned) return 0;
+  if (!cleaned) return null;
   const parsed = Number.parseFloat(cleaned);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return Math.round(parsed * 100) / 100;
@@ -142,34 +121,42 @@ export function parseDate(value: string | undefined): string | null {
   const raw = normalizeText(value);
   if (!raw) return '';
 
+  const MONTHS: Record<string, number> = {
+    jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+    may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12
+  };
+
   let year = 0;
   let month = 0;
   let day = 0;
 
-  const iso = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(raw);
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw);
   if (iso) {
     year = Number(iso[1]);
     month = Number(iso[2]);
     day = Number(iso[3]);
   }
 
-  const us = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(raw);
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
   if (!iso && us) {
     month = Number(us[1]);
     day = Number(us[2]);
     year = Number(us[3]);
   }
 
-  if (!iso && !us) {
-    const parsed = new Date(raw);
-    if (!Number.isNaN(parsed.getTime())) {
-      year = parsed.getUTCFullYear();
-      month = parsed.getUTCMonth() + 1;
-      day = parsed.getUTCDate();
+  const natural = /^([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})$/.exec(raw);
+  if (!iso && !us && natural) {
+    const parsedMonth = MONTHS[natural[1].toLowerCase()];
+    if (parsedMonth) {
+      month = parsedMonth;
+      day = Number(natural[2]);
+      year = Number(natural[3]);
     }
   }
 
-  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (!year || !month || !day) return null;
+
   const dt = new Date(Date.UTC(year, month - 1, day));
   if (dt.getUTCFullYear() !== year || dt.getUTCMonth() + 1 !== month || dt.getUTCDate() !== day) {
     return null;
@@ -178,82 +165,133 @@ export function parseDate(value: string | undefined): string | null {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export function validateAndNormalizeRows(csvContent: string): {
-  rows: NormalizedEmployeeImportRow[];
-  errors: RowValidationError[];
-  rowsProcessed: number;
-  unknownColumns: string[];
-} {
-  const parsed = parseCsv(csvContent);
-  if (parsed.headers.length === 0) {
-    return { rows: [], errors: [{ row: 1, error: 'CSV is empty or malformed' }], rowsProcessed: 0, unknownColumns: [] };
-  }
+export function prepareEmployeeImport(csvContent: string): ImportPreparation {
+  const errors: RowValidationError[] = [];
+  const warnings: RowValidationWarning[] = [];
 
-  const headers = parsed.headers.map(toCanonicalHeader);
-  const missingColumns = REQUIRED_COLUMNS.filter((column) => !headers.includes(column));
-  if (missingColumns.length > 0) {
+  let rawRows: Record<string, string>[] = [];
+  try {
+    rawRows = parseCsv(csvContent);
+  } catch {
     return {
-      rows: [],
-      errors: [{ row: 1, error: `Missing required columns: ${missingColumns.join(', ')}` }],
-      rowsProcessed: parsed.rows.length,
-      unknownColumns: headers.filter((header) => !REQUIRED_COLUMNS.includes(header as (typeof REQUIRED_COLUMNS)[number]) && !['position_type', 'geography', 'level', 'manager_email'].includes(header))
+      validRows: [],
+      preview: {
+        rowsReceived: 0,
+        rowsValid: 0,
+        rowsInvalid: 0,
+        errors: [{ row: 1, message: 'CSV is empty or malformed' }],
+        warnings: []
+      },
+      unknownColumns: []
     };
   }
 
-  const unknownColumns = headers.filter(
-    (header) => !REQUIRED_COLUMNS.includes(header as (typeof REQUIRED_COLUMNS)[number]) && !['position_type', 'geography', 'level', 'manager_email'].includes(header)
-  );
+  if (rawRows.length === 0) {
+    return {
+      validRows: [],
+      preview: {
+        rowsReceived: 0,
+        rowsValid: 0,
+        rowsInvalid: 0,
+        errors: [{ row: 1, message: 'CSV must include at least one data row' }],
+        warnings: []
+      },
+      unknownColumns: []
+    };
+  }
 
-  const errors: RowValidationError[] = [];
-  const rows: NormalizedEmployeeImportRow[] = [];
+  const originalHeaders = Object.keys(rawRows[0] ?? {});
+  const canonicalHeaderMap = new Map<string, string>();
+  for (const header of originalHeaders) {
+    canonicalHeaderMap.set(toCanonicalHeader(header), header);
+  }
+
+  const missingColumns = REQUIRED_COLUMNS.filter((column) => !canonicalHeaderMap.has(column));
+  if (missingColumns.length > 0) {
+    return {
+      validRows: [],
+      preview: {
+        rowsReceived: rawRows.length,
+        rowsValid: 0,
+        rowsInvalid: rawRows.length,
+        errors: [{ row: 1, message: `Missing required columns: ${missingColumns.join(', ')}` }],
+        warnings: []
+      },
+      unknownColumns: Array.from(canonicalHeaderMap.keys()).filter((header) => !KNOWN_COLUMNS.has(header as CanonicalEmployeeImportColumn))
+    };
+  }
+
+  const unknownColumns = Array.from(canonicalHeaderMap.keys()).filter((header) => !KNOWN_COLUMNS.has(header as CanonicalEmployeeImportColumn));
+
   const seenIds = new Set<string>();
+  const seenEmails = new Set<string>();
+  const validRows: NormalizedEmployeeImportRow[] = [];
 
-  parsed.rows.forEach((rawRow, index) => {
+  rawRows.forEach((sourceRow, index) => {
     const rowNumber = index + 2;
-    const row: Record<string, string> = {};
-    headers.forEach((header, i) => {
-      row[header] = rawRow[i] ?? '';
-    });
+    const read = (canonical: string): string => {
+      const original = canonicalHeaderMap.get(canonical);
+      return original ? sourceRow[original] ?? '' : '';
+    };
 
-    const id = normalizeText(row.id);
-    const name = normalizeText(row.name);
-    const email = normalizeEmail(row.email);
-    const department = normalizeText(row.department);
-    const title = normalizeText(row.title);
-    const manager = normalizeText(row.manager);
-    const managerEmail = normalizeEmail(row.manager_email);
-    const positionType = normalizeText(row.position_type);
-    const geography = normalizeText(row.geography);
-    const level = normalizeText(row.level);
-    const salary = parseSalary(row.salary);
-    const hireDate = parseDate(row.hire_date);
+    const id = normalizeText(read('id'));
+    const name = normalizeText(read('name'));
+    const email = normalizeEmail(read('email'));
+    const department = normalizeText(read('department'));
+    const title = normalizeText(read('title'));
+    const manager = normalizeText(read('manager'));
+    const managerEmail = normalizeEmail(read('manager_email'));
+    const positionType = normalizeText(read('position_type'));
+    const geography = normalizeText(read('geography'));
+    const level = normalizeText(read('level'));
+    const salary = parseSalary(read('salary'));
+    const hireDate = parseDate(read('hire_date'));
 
-    if (!id) errors.push({ row: rowNumber, error: 'id is required' });
-    if (!name) errors.push({ row: rowNumber, error: 'name is required' });
-    if (salary === null) errors.push({ row: rowNumber, error: `salary is invalid: "${row.salary ?? ''}"` });
-    if (hireDate === null) errors.push({ row: rowNumber, error: `hire_date could not be parsed: "${row.hire_date ?? ''}"` });
+    const rowErrors: string[] = [];
+
+    if (!name) rowErrors.push('Missing name');
+    if (salary === null) rowErrors.push('Salary could not be parsed');
+
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push({ row: rowNumber, error: `email is invalid: "${row.email ?? ''}"` });
+      rowErrors.push(`Invalid email: "${read('email')}"`);
     }
-    if (managerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(managerEmail)) {
-      errors.push({ row: rowNumber, error: `manager_email is invalid: "${row.manager_email ?? ''}"` });
-    }
+
+    if (hireDate === null) rowErrors.push(`Invalid hire_date: "${read('hire_date')}"`);
 
     if (id && seenIds.has(id.toLowerCase())) {
-      errors.push({ row: rowNumber, error: `duplicate id in import file: "${id}"` });
+      rowErrors.push(`Duplicate id in file: "${id}"`);
     }
     if (id) seenIds.add(id.toLowerCase());
 
-    if (errors.some((err) => err.row === rowNumber)) return;
+    if (email && seenEmails.has(email)) {
+      rowErrors.push(`Duplicate email in file: "${email}"`);
+    }
+    if (email) seenEmails.add(email);
 
-    rows.push({
+    if (!id) {
+      warnings.push({ row: rowNumber, message: 'Missing id, UUID will be generated on commit' });
+    }
+
+    for (const field of RECOMMENDED_FIELDS) {
+      const value = field === 'email' ? email : field === 'department' ? department : title;
+      if (!value) warnings.push({ row: rowNumber, message: `Recommended field missing: ${field}` });
+    }
+
+    if (rowErrors.length > 0) {
+      rowErrors.forEach((message) => errors.push({ row: rowNumber, message }));
+      return;
+    }
+
+    const normalizedSalary = salary as number;
+
+    validRows.push({
       rowNumber,
       id,
       name,
       email,
       department,
       title,
-      salary: salary ?? 0,
+      salary: normalizedSalary,
       manager,
       managerEmail,
       hireDate: hireDate ?? '',
@@ -263,5 +301,15 @@ export function validateAndNormalizeRows(csvContent: string): {
     });
   });
 
-  return { rows, errors, rowsProcessed: parsed.rows.length, unknownColumns };
+  return {
+    validRows,
+    preview: {
+      rowsReceived: rawRows.length,
+      rowsValid: validRows.length,
+      rowsInvalid: rawRows.length - validRows.length,
+      errors,
+      warnings
+    },
+    unknownColumns
+  };
 }

@@ -3,50 +3,53 @@ import {
   parseCsv,
   parseDate,
   parseSalary,
-  toCanonicalHeader,
-  validateAndNormalizeRows
+  prepareEmployeeImport,
+  toCanonicalHeader
 } from './employeeImport.js';
 
 describe('employee import parsing utilities', () => {
   it('parses BOM and quoted CSV rows', () => {
-    const parsed = parseCsv('\uFEFFid,name,email,department,title,salary,manager,hire_date\n"E-1","Doe, Jane",jane@demo.com,Engineering,Developer,"$78,000.00",,2024-01-04');
-    expect(parsed.headers[0]).toBe('id');
-    expect(parsed.rows).toHaveLength(1);
-    expect(parsed.rows[0][1]).toBe('Doe, Jane');
+    const parsed = parseCsv('\uFEFFid,name,email,department,title,salary,manager,hire_date\r\n"E-1","Doe, Jane",jane@demo.com,Engineering,Developer,"$78,000.00",,2024-01-04');
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.name).toBe('Doe, Jane');
   });
 
   it('normalizes header aliases', () => {
     expect(toCanonicalHeader('Hire Date')).toBe('hire_date');
     expect(toCanonicalHeader('Employee ID')).toBe('id');
     expect(toCanonicalHeader('Base Salary')).toBe('salary');
+    expect(toCanonicalHeader('Job Title')).toBe('title');
+    expect(toCanonicalHeader('Dept')).toBe('department');
   });
 
   it('normalizes salary values', () => {
     expect(parseSalary('78000')).toBe(78000);
     expect(parseSalary('78,000')).toBe(78000);
     expect(parseSalary('$78,000.00')).toBe(78000);
+    expect(parseSalary('')).toBeNull();
     expect(parseSalary('abc')).toBeNull();
   });
 
   it('normalizes dates across common formats', () => {
     expect(parseDate('2024-01-31')).toBe('2024-01-31');
     expect(parseDate('01/31/2024')).toBe('2024-01-31');
-    expect(parseDate('Jan 31, 2024')).toBe('2024-01-31');
+    expect(parseDate('January 31 2024')).toBe('2024-01-31');
     expect(parseDate('2024-02-30')).toBeNull();
   });
 });
 
-describe('validateAndNormalizeRows', () => {
-  it('accepts required+optional schema with blank manager and ignores unknown extra columns', () => {
+describe('prepareEmployeeImport', () => {
+  it('returns preview and normalized rows for valid csv', () => {
     const csv = [
-      'Employee ID,Name,Email,Department,Title,Base Salary,Manager,Hire Date,Position Type,Geography,Level,Extra Field',
-      'E1, Jane   Doe , JANE@DEMO.COM , Engineering , Software Engineer , "$78,000.00", , 1/15/2024 , Full Time , US , L4 , ignored'
+      'Employee ID,Name,Email,Department,Job Title,Base Salary,Manager,Hire Date,Position Type,Geography,Level,Extra Field',
+      'E1, Jane   Doe , JANE@DEMO.COM , Engineering , Software Engineer ,"$78,000.00", , 1/15/2024 , Full Time , US , L4 , ignored'
     ].join('\n');
 
-    const result = validateAndNormalizeRows(csv);
-    expect(result.errors).toEqual([]);
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]).toMatchObject({
+    const result = prepareEmployeeImport(csv);
+    expect(result.preview.rowsReceived).toBe(1);
+    expect(result.preview.rowsValid).toBe(1);
+    expect(result.preview.rowsInvalid).toBe(0);
+    expect(result.validRows[0]).toMatchObject({
       id: 'E1',
       name: 'Jane Doe',
       email: 'jane@demo.com',
@@ -62,37 +65,46 @@ describe('validateAndNormalizeRows', () => {
 
   it('reports missing required header columns', () => {
     const csv = 'id,name,salary\nE1,Jane,100';
-    const result = validateAndNormalizeRows(csv);
-    expect(result.errors[0]?.error).toContain('Missing required columns');
+    const result = prepareEmployeeImport(csv);
+    expect(result.preview.errors[0]?.message).toContain('Missing required columns');
   });
 
-  it('reports row-level errors for unusable data', () => {
+  it('reports invalid and duplicate rows', () => {
     const csv = [
       'id,name,email,department,title,salary,manager,hire_date',
-      'E1,,not-an-email,Engineering,Engineer,abc,Leader,2024-13-01'
+      'E1,,bad-email,Engineering,Engineer,abc,Leader,2024-13-01',
+      'E1,Good Name,bad-email,Engineering,Engineer,100000,Leader,2024-01-01',
+      'E2,Another,bad-email,Engineering,Engineer,100000,Leader,2024-01-01'
     ].join('\n');
 
-    const result = validateAndNormalizeRows(csv);
-    expect(result.rows).toHaveLength(0);
-    expect(result.errors.map((err) => err.error)).toEqual(
+    const result = prepareEmployeeImport(csv);
+    expect(result.validRows).toHaveLength(0);
+    expect(result.preview.errors.map((err) => err.message)).toEqual(
       expect.arrayContaining([
-        'name is required',
-        'salary is invalid: "abc"',
-        'hire_date could not be parsed: "2024-13-01"',
-        'email is invalid: "not-an-email"'
+        'Missing name',
+        'Salary could not be parsed',
+        'Invalid hire_date: "2024-13-01"',
+        'Invalid email: "bad-email"',
+        'Duplicate id in file: "E1"',
+        'Duplicate email in file: "bad-email"'
       ])
     );
   });
 
-  it('detects malformed/empty csv', () => {
-    const result = validateAndNormalizeRows('');
-    expect(result.errors[0]).toEqual({ row: 1, error: 'CSV is empty or malformed' });
-  });
+  it('warns when recommended fields are missing and supports missing id for UUID generation', () => {
+    const csv = [
+      'id,name,email,department,title,salary,manager,hire_date',
+      ',No Id Person,,,Engineer,100000,Leader,2024-01-01'
+    ].join('\n');
 
-  it('supports pasted CSV with BOM', () => {
-    const csv = '\uFEFFid,name,email,department,title,salary,manager,hire_date\nE2,John Doe,john@demo.com,Sales,AE,90000,Manager,2024/05/01';
-    const result = validateAndNormalizeRows(csv);
-    expect(result.errors).toEqual([]);
-    expect(result.rows[0]?.hireDate).toBe('2024-05-01');
+    const result = prepareEmployeeImport(csv);
+    expect(result.validRows).toHaveLength(1);
+    expect(result.preview.warnings.map((warn) => warn.message)).toEqual(
+      expect.arrayContaining([
+        'Missing id, UUID will be generated on commit',
+        'Recommended field missing: email',
+        'Recommended field missing: department'
+      ])
+    );
   });
 });

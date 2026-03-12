@@ -12,17 +12,18 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "pg": "^8.13.0",
-    "zod": "^3.23.8",
-    "dotenv": "^16.4.5"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/pg": "^8.11.10",
-    "tsx": "^4.19.1",
-    "vitest": "^2.1.1",
+    "@types/supertest": "^6.0.3",
     "supertest": "^7.0.0",
-    "@types/supertest": "^6.0.3"
+    "tsx": "^4.19.1",
+    "vitest": "^2.1.1"
   }
 }

@@ -51,7 +51,27 @@ describe('employees persistence path', () => {
     });
   });
 
-  it('successful insert persists to DB and returns persisted counters', async () => {
+  it('returns preview by default and does not write rows', async () => {
+    const txQuery = vi.fn();
+    mockConnect.mockResolvedValue({ query: txQuery, release: vi.fn() });
+
+    const app = await makeApp();
+    const csv = [
+      'id,name,email,department,title,salary,manager,hire_date',
+      'E100,Jane,jane@demo.com,Eng,Engineer,100000,Leader,2024-01-01'
+    ].join('\n');
+
+    const response = await request(app).post('/api/v1/employees/import-csv').send({ csvContent: csv });
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      rowsReceived: 1,
+      rowsValid: 1,
+      rowsInvalid: 0
+    });
+    expect(txQuery).not.toHaveBeenCalled();
+  });
+
+  it('successful commit persists to DB and returns counters', async () => {
     const txQuery = vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [], rowCount: 0 };
       if (sql.includes('INSERT INTO employees')) {
@@ -68,11 +88,10 @@ describe('employees persistence path', () => {
       'E101,John,john@demo.com,Eng,Engineer,110000,Leader,2024-01-01'
     ].join('\n');
 
-    const response = await request(app).post('/api/v1/employees/import-csv').send({ csvContent: csv });
+    const response = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({
       rowsReceived: 2,
-      rowsValid: 2,
       rowsInserted: 1,
       rowsUpdated: 1,
       rowsRejected: 0
@@ -80,48 +99,21 @@ describe('employees persistence path', () => {
     expect(txQuery).toHaveBeenCalledWith('COMMIT');
   });
 
-  it('successful update persists to DB', async () => {
-    const txQuery = vi.fn(async (sql: string, params?: unknown[]) => {
-      if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [], rowCount: 0 };
-      if (sql.includes('INSERT INTO employees')) {
-        return { rows: [{ inserted: (params?.[0] as string) === 'E200' }], rowCount: 1 };
-      }
-      return { rows: [], rowCount: 0 };
-    });
+  it('rejects commit when invalid rows exist', async () => {
+    const txQuery = vi.fn();
     mockConnect.mockResolvedValue({ query: txQuery, release: vi.fn() });
 
     const app = await makeApp();
     const csv = [
       'id,name,email,department,title,salary,manager,hire_date',
-      'E200,Jane,jane@demo.com,Eng,Engineer,100000,Leader,2024-01-01',
-      'E201,John,john@demo.com,Eng,Engineer,110000,Leader,2024-01-01'
+      'E1,,bad-email,Eng,Engineer,abc,Leader,2024-13-01'
     ].join('\n');
 
-    const response = await request(app).post('/api/v1/employees/import-csv').send({ csvContent: csv });
-    expect(response.status).toBe(200);
-    expect(response.body.data.rowsInserted).toBe(1);
-    expect(response.body.data.rowsUpdated).toBe(1);
-  });
-
-  it('0 affected rows does not report success', async () => {
-    const txQuery = vi.fn(async (sql: string) => {
-      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [], rowCount: 0 };
-      if (sql.includes('INSERT INTO employees')) return { rows: [], rowCount: 0 };
-      return { rows: [], rowCount: 0 };
-    });
-    mockConnect.mockResolvedValue({ query: txQuery, release: vi.fn() });
-
-    const app = await makeApp();
-    const csv = [
-      'id,name,email,department,title,salary,manager,hire_date',
-      'E250,Zero,z@demo.com,Ops,Analyst,90000,Boss,2024-02-01'
-    ].join('\n');
-
-    const response = await request(app).post('/api/v1/employees/import-csv').send({ csvContent: csv });
-    expect(response.status).toBe(500);
-    expect(response.body.success).toBe(false);
-    expect(response.body.error).toContain('upsert affected 0 rows');
-    expect(txQuery).toHaveBeenCalledWith('ROLLBACK');
+    const response = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });
+    expect(response.status).toBe(400);
+    expect(response.body.data.rowsRejected).toBe(1);
+    expect(response.body.data.errors.length).toBeGreaterThan(0);
+    expect(txQuery).not.toHaveBeenCalled();
   });
 
   it('roster shows imported rows immediately after import from same source table', async () => {
@@ -167,7 +159,7 @@ describe('employees persistence path', () => {
       'E300,Roster Person,roster@demo.com,Ops,Analyst,90000,Boss,2024-02-01'
     ].join('\n');
 
-    const importRes = await request(app).post('/api/v1/employees/import-csv').send({ csvContent: csv });
+    const importRes = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });
     expect(importRes.status).toBe(200);
 
     const rosterRes = await request(app).get('/api/v1/employees');
@@ -191,7 +183,7 @@ describe('employees persistence path', () => {
       'E400,Jane,jane@demo.com,Eng,Engineer,100000,Leader,2024-01-01'
     ].join('\n');
 
-    const response = await request(app).post('/api/v1/employees/import-csv').send({ csvContent: csv });
+    const response = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });
     expect(response.status).toBe(500);
     expect(response.body.error).toContain('db exploded');
     expect(txQuery).toHaveBeenCalledWith('ROLLBACK');
