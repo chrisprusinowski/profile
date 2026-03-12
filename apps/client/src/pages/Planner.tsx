@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  buildCompensationTotalSummaryCsv,
   bulkUpdateEmployeeCyclePlans,
+  downloadCompensationFilteredExport,
   fetchCompensationCycles,
   fetchCompensationTotalSummary,
   fetchPlannerAudit,
@@ -27,6 +27,26 @@ type FieldConfig = {
 };
 
 const STATUS_OPTIONS: PlannerWorkflowStatus[] = ['not_started', 'in_progress', 'manager_submitted', 'exec_reviewed', 'finalized'];
+
+
+const SAVED_VIEWS_KEY = 'planner_saved_views_v1';
+
+type SavedPlannerView = {
+  name: string;
+  search: string;
+  deptFilter: string;
+  promoOnly: boolean;
+  visibleColumns: Record<string, boolean>;
+};
+
+function loadSavedViews(): SavedPlannerView[] {
+  try {
+    const raw = localStorage.getItem(SAVED_VIEWS_KEY);
+    return raw ? (JSON.parse(raw) as SavedPlannerView[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 const COLUMNS: FieldConfig[] = [
   { key: 'employeeId', label: 'Employee ID', sticky: true, width: 120 },
@@ -71,6 +91,7 @@ export function Planner() {
   const [audit, setAudit] = useState<PlannerAuditChange[]>([]);
   const [auditEmployeeId, setAuditEmployeeId] = useState<string | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => Object.fromEntries(COLUMNS.map((c) => [String(c.key), true])));
+  const [savedViews, setSavedViews] = useState<SavedPlannerView[]>(() => loadSavedViews());
   const pendingRef = useRef<Record<string, Partial<EmployeeCyclePlanPayload>>>({});
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const inputRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | null>>({});
@@ -92,6 +113,10 @@ export function Planner() {
     if (!cycleId) return;
     void load(cycleId);
   }, [cycleId, load]);
+
+  useEffect(() => {
+    localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(savedViews));
+  }, [savedViews]);
 
   const departments = useMemo(() => Array.from(new Set(rows.map((r) => r.importedDepartment).filter(Boolean))).sort(), [rows]);
 
@@ -164,13 +189,18 @@ export function Planner() {
     await load(cycleId);
   };
 
-  const onExport = () => {
-    const csv = buildCompensationTotalSummaryCsv(filtered);
+  const onExport = async () => {
+    if (!cycleId) return;
+    const { csv } = await downloadCompensationFilteredExport(cycleId, {
+      search,
+      department: deptFilter,
+      promotionOnly: promoOnly
+    });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `comp-total-summary-${cycleId ?? 'cycle'}-filtered.csv`;
+    a.download = `comp-total-summary-${cycleId}-filtered.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -183,32 +213,45 @@ export function Planner() {
         <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}><option value="all">All departments</option>{departments.map((d) => <option key={d} value={d ?? ''}>{d}</option>)}</select>
         <label><input type="checkbox" checked={promoOnly} onChange={(e) => setPromoOnly(e.target.checked)} /> Promotion only</label>
         <button className="btn btn-primary" onClick={() => void onBulkEdit()}>Bulk edit selected / filtered</button>
-        <button className="btn" onClick={onExport}>Export filtered</button>
+        <button className="btn" onClick={() => void onExport()}>Export filtered</button>
+        <button className="btn" onClick={() => {
+          const name = window.prompt('Saved view name');
+          if (!name) return;
+          setSavedViews((prev) => [...prev.filter((v) => v.name !== name), { name, search, deptFilter, promoOnly, visibleColumns }]);
+        }}>Save view</button>
+        <select defaultValue="" onChange={(e) => {
+          const view = savedViews.find((v) => v.name === e.target.value);
+          if (!view) return;
+          setSearch(view.search);
+          setDeptFilter(view.deptFilter);
+          setPromoOnly(view.promoOnly);
+          setVisibleColumns(view.visibleColumns);
+        }}><option value="">Load saved view</option>{savedViews.map((view) => <option key={view.name} value={view.name}>{view.name}</option>)}</select>
       </div></div>
 
       <div className="card" style={{ marginTop: 12 }}><div className="card-body" style={{ padding: 0 }}>
-        <div className="planner-grid-wrap"><table className="planner-grid"><thead><tr>
+        <div className="planner-grid-wrap" style={{ maxHeight: 560, overflow: "auto" }}><table className="planner-grid"><thead><tr>
           <th className="sticky-col" style={{ left: 0, minWidth: 42 }}>✓</th>
           {visible.map((col, idx) => <th key={String(col.key)} className={col.sticky ? 'sticky-col' : ''} style={{ left: col.sticky ? 42 + idx * 120 : undefined, minWidth: col.width ?? 120 }}>{col.label}</th>)}
           <th>Status</th><th>Workflow</th><th>Audit</th>
         </tr></thead><tbody>
-          {filtered.map((row, rowIdx) => <tr key={row.employeeId}>
+          {filtered.map((row, rowIdx) => { const rowLocked = row.enteredPlanningStatus === 'finalized'; return <tr key={row.employeeId}>
             <td className="sticky-col" style={{ left: 0 }}><input type="checkbox" checked={Boolean(selected[row.employeeId])} onChange={(e) => setSelected((p) => ({ ...p, [row.employeeId]: e.target.checked }))} /></td>
             {visible.map((col, colIdx) => {
               const value = row[col.key];
               const ck = `${row.employeeId}:${String(col.key)}`;
               return <td key={String(col.key)} className={col.sticky ? 'sticky-col cell-sticky' : col.editable ? 'editable-cell' : 'derived-cell'} style={{ left: col.sticky ? 42 + colIdx * 120 : undefined, minWidth: col.width ?? 120 }}>
                 {col.editable ? (col.format === 'boolean' ? (
-                  <select ref={(el) => { inputRefs.current[`${rowIdx}:${colIdx}`] = el; }} value={cellDrafts[ck] ?? (value === null ? '' : String(value))} onChange={(e) => { setCellDrafts((p) => ({ ...p, [ck]: e.target.value })); if (col.planKey) queueSave(row.employeeId, { [col.planKey]: parseInput(e.target.value, col.format) } as Partial<EmployeeCyclePlanPayload>); }} onKeyDown={(e) => handleKeyNav(e, rowIdx, colIdx)}><option value="">—</option><option value="true">Yes</option><option value="false">No</option></select>
+                  <select disabled={rowLocked} ref={(el) => { inputRefs.current[`${rowIdx}:${colIdx}`] = el; }} value={cellDrafts[ck] ?? (value === null ? '' : String(value))} onChange={(e) => { setCellDrafts((p) => ({ ...p, [ck]: e.target.value })); if (col.planKey) queueSave(row.employeeId, { [col.planKey]: parseInput(e.target.value, col.format) } as Partial<EmployeeCyclePlanPayload>); }} onKeyDown={(e) => handleKeyNav(e, rowIdx, colIdx)}><option value="">—</option><option value="true">Yes</option><option value="false">No</option></select>
                 ) : (
-                  <input ref={(el) => { inputRefs.current[`${rowIdx}:${colIdx}`] = el; }} value={cellDrafts[ck] ?? (value === null || value === undefined ? '' : String(value))} onChange={(e) => setCellDrafts((p) => ({ ...p, [ck]: e.target.value }))} onBlur={(e) => { if (col.planKey) queueSave(row.employeeId, { [col.planKey]: parseInput(e.target.value, col.format) } as Partial<EmployeeCyclePlanPayload>); }} onPaste={(e) => { const text = e.clipboardData.getData('text/plain'); if (text.includes('\n')) { e.preventDefault(); const [head] = text.split(/\r?\n/); if (col.planKey) { setCellDrafts((p) => ({ ...p, [ck]: head })); queueSave(row.employeeId, { [col.planKey]: parseInput(head, col.format) } as Partial<EmployeeCyclePlanPayload>); } } }} onKeyDown={(e) => handleKeyNav(e, rowIdx, colIdx)} />
+                  <input disabled={rowLocked} ref={(el) => { inputRefs.current[`${rowIdx}:${colIdx}`] = el; }} value={cellDrafts[ck] ?? (value === null || value === undefined ? '' : String(value))} onChange={(e) => setCellDrafts((p) => ({ ...p, [ck]: e.target.value }))} onBlur={(e) => { if (col.planKey) queueSave(row.employeeId, { [col.planKey]: parseInput(e.target.value, col.format) } as Partial<EmployeeCyclePlanPayload>); }} onPaste={(e) => { const text = e.clipboardData.getData('text/plain'); if (text.includes('\n')) { e.preventDefault(); const [head] = text.split(/\r?\n/); if (col.planKey) { setCellDrafts((p) => ({ ...p, [ck]: head })); queueSave(row.employeeId, { [col.planKey]: parseInput(head, col.format) } as Partial<EmployeeCyclePlanPayload>); } } }} onKeyDown={(e) => handleKeyNav(e, rowIdx, colIdx)} />
                 )) : <span>{fmt(value, col.format)}</span>}
               </td>;
             })}
             <td>{statuses[row.employeeId] ?? 'idle'}</td>
-            <td><select value={row.enteredPlanningStatus ?? 'not_started'} onChange={(e) => void onStatusChange(row.employeeId, e.target.value as PlannerWorkflowStatus)}>{STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}</select></td>
+            <td><select disabled={rowLocked} value={row.enteredPlanningStatus ?? 'not_started'} onChange={(e) => void onStatusChange(row.employeeId, e.target.value as PlannerWorkflowStatus)}>{STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}</select></td>
             <td><button className="btn btn-sm" onClick={() => void onAudit(row.employeeId)}>View</button></td>
-          </tr>)}
+          </tr>;})}
         </tbody></table></div>
       </div></div>
 

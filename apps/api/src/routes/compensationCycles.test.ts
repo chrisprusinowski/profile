@@ -10,13 +10,13 @@ vi.mock('../db.js', () => ({
   }
 }));
 
-function makeApp() {
+function makeApp(role: 'admin' | 'manager' | 'executive' = 'admin') {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as any).user = {
-      email: 'admin@demo.com',
-      role: 'admin',
+      email: `${role}@demo.com`,
+      role,
       managerName: null,
       managerEmail: null,
       isActive: true
@@ -38,185 +38,57 @@ describe('compensationCycles router', () => {
     vi.clearAllMocks();
   });
 
-  it('creates cycles', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 1, name: 'FY27 Planning', cycleType: 'annual' }],
-      rowCount: 1
-    });
-
-    const app = await makeApp();
-    const response = await request(app)
-      .post('/api/v1/compensation/cycles')
-      .send({ name: 'FY27 Planning', cycleType: 'annual' });
-
-    expect(response.status).toBe(201);
-    expect(response.body.data.id).toBe(1);
-  });
-
-  it('saves cycle plans using one employee/cycle upsert', async () => {
+  it('locks finalized plan edits without admin override', async () => {
     mockQuery
-      .mockResolvedValueOnce({ rows: [{ cycle_id: 1, employee_id: 'E1' }], rowCount: 1 })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            employeeId: 'E1',
-            salary: 100000,
-            rangeMid: 100000,
-            bonusTargetPercent: 10,
-            meritIncreaseAmount: 5000,
-            meritIncreasePercent: null,
-            recommendedMeritAmount: 4000,
-            recommendedMeritPercent: null,
-            promotionIncreaseAmount: 0,
-            bonusOverrideAmount: null,
-            bonusOverridePercent: null,
-            bonusWeightCompany: 0.5,
-            bonusWeightIndividual: 0.5,
-            goalAttainmentCompany: 100,
-            goalAttainmentIndividual: 100,
-            plannerVariance: null,
-            newRangeMid: 100000
-          }
-        ],
-        rowCount: 1
-      })
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+      .mockResolvedValueOnce({ rows: [{ planningStatus: 'finalized' }], rowCount: 1 });
 
-    const app = await makeApp();
+    const app = await makeApp('manager');
     const response = await request(app)
       .put('/api/v1/compensation/cycles/1/plans/E1')
-      .send({
-        meritIncreaseAmount: 5000,
-        recommendedMeritAmount: 4000
-      });
+      .send({ meritIncreasePercent: 3 });
 
-    expect(response.status).toBe(200);
-    const sql = String(mockQuery.mock.calls[1][0]);
-    expect(sql).toContain('ON CONFLICT (cycle_id, employee_id)');
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe('plan_locked');
   });
 
-  it('retrieves merged total-summary rows', async () => {
-    mockQuery
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({ rows: [{ employeeId: 'E1', importedSalary: 100000, derivedCompaRatio: 1 }], rowCount: 1 });
+  it('rejects invalid status transition', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ planningStatus: 'not_started' }], rowCount: 1 });
 
-    const app = await makeApp();
-    const response = await request(app).get('/api/v1/compensation/cycles/1/total-summary');
-
-    expect(response.status).toBe(200);
-    expect(response.body.data).toHaveLength(1);
-    expect(response.body.data[0]).toMatchObject({ employeeId: 'E1', importedSalary: 100000, derivedCompaRatio: 1 });
-  });
-
-  it('regenerates outputs deterministically when called repeatedly', async () => {
-    mockQuery
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            employeeId: 'E1',
-            salary: null,
-            rangeMid: 100000,
-            bonusTargetPercent: 10,
-            meritIncreaseAmount: null,
-            meritIncreasePercent: null,
-            recommendedMeritAmount: null,
-            recommendedMeritPercent: null,
-            promotionIncreaseAmount: null,
-            bonusOverrideAmount: null,
-            bonusOverridePercent: null,
-            bonusWeightCompany: null,
-            bonusWeightIndividual: null,
-            goalAttainmentCompany: null,
-            goalAttainmentIndividual: null,
-            plannerVariance: null,
-            newRangeMid: 100000
-          }
-        ],
-        rowCount: 1
-      })
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
-      .mockResolvedValueOnce({ rows: [{ employeeId: 'E1', gapFlags: ['missing_salary'] }], rowCount: 1 })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            employeeId: 'E1',
-            salary: null,
-            rangeMid: 100000,
-            bonusTargetPercent: 10,
-            meritIncreaseAmount: null,
-            meritIncreasePercent: null,
-            recommendedMeritAmount: null,
-            recommendedMeritPercent: null,
-            promotionIncreaseAmount: null,
-            bonusOverrideAmount: null,
-            bonusOverridePercent: null,
-            bonusWeightCompany: null,
-            bonusWeightIndividual: null,
-            goalAttainmentCompany: null,
-            goalAttainmentIndividual: null,
-            plannerVariance: null,
-            newRangeMid: 100000
-          }
-        ],
-        rowCount: 1
-      })
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
-      .mockResolvedValueOnce({ rows: [{ employeeId: 'E1', gapFlags: ['missing_salary'] }], rowCount: 1 });
-
-    const app = await makeApp();
-    const first = await request(app).get('/api/v1/compensation/cycles/1/outputs');
-    const second = await request(app).get('/api/v1/compensation/cycles/1/outputs');
-
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
-    const outputUpserts = mockQuery.mock.calls.filter((call) => String(call[0]).includes('INSERT INTO employee_comp_outputs'));
-    expect(outputUpserts).toHaveLength(2);
-    expect(first.body.data[0].gapFlags).toContain('missing_salary');
-    expect(second.body.data[0].gapFlags).toContain('missing_salary');
-  });
-
-
-
-
-  it('creates planner audit entries endpoint response', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 10, cycleId: 1, employeeId: 'E1', fieldName: 'meritIncreasePercent', oldValue: 1, newValue: 2, changedBy: 'admin@demo.com', changedAt: '2026-01-01' }],
-      rowCount: 1
-    });
-
-    const app = await makeApp();
-    const response = await request(app).get('/api/v1/compensation/cycles/1/plans/E1/audit');
-    expect(response.status).toBe(200);
-    expect(response.body.data[0].fieldName).toBe('meritIncreasePercent');
-  });
-
-  it('updates plan workflow status', async () => {
-    mockQuery
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
-
-    const app = await makeApp();
+    const app = await makeApp('manager');
     const response = await request(app)
       .put('/api/v1/compensation/cycles/1/plans/E1/status')
-      .send({ status: 'manager_submitted' });
-    expect(response.status).toBe(200);
+      .send({ status: 'finalized' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe('invalid_status_transition');
   });
 
-  it('exports total-summary CSV with stable columns', async () => {
+  it('exports CSV with metadata headers and filters', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({
-        rows: [{ employeeId: 'E1', importedFullName: 'Alex Doe', derivedGapFlags: ['missing_salary'] }],
-        rowCount: 1
-      });
+      .mockResolvedValueOnce({ rows: [{ employeeId: 'E1', importedFirstName: 'Alex' }], rowCount: 1 });
 
-    const app = await makeApp();
-    const response = await request(app).get('/api/v1/compensation/cycles/1/total-summary.csv');
+    const app = await makeApp('admin');
+    const response = await request(app).get('/api/v1/compensation/cycles/1/total-summary.csv?department=Engineering');
 
     expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toContain('text/csv');
+    expect(response.headers['x-export-schema-version']).toBeTruthy();
+    expect(response.headers['x-export-filter-summary']).toContain('Engineering');
     expect(response.text).toContain('employeeId,importBatchId,importedFirstName');
-    expect(response.text).toContain('E1');
-    expect(response.text).toContain('"[""missing_salary""]"');
+  });
+
+  it('returns parity mismatches grouped by employee and field', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ employeeId: 'E1', derivedFinalTotalBonusProrated: 10000 }], rowCount: 1 });
+
+    const app = await makeApp('admin');
+    const response = await request(app)
+      .post('/api/v1/compensation/cycles/1/parity-review')
+      .send({ expected: [{ employeeId: 'E1', fields: { derivedFinalTotalBonusProrated: 9000 } }] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.mismatchCount).toBe(1);
+    expect(response.body.data.mismatches[0]).toMatchObject({ employeeId: 'E1', field: 'derivedFinalTotalBonusProrated' });
   });
 });

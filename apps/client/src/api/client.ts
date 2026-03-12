@@ -679,16 +679,42 @@ export async function fetchCompensationCycles(): Promise<CompensationCycle[]> {
 }
 
 export async function fetchCompensationTotalSummary(
-  cycleId: number
+  cycleId: number,
+  filters?: { search?: string; department?: string; promotionOnly?: boolean }
 ): Promise<CompensationTotalSummaryRow[]> {
   requireApi();
-  const res = await authedFetch(
-    `${API_BASE}/api/v1/compensation/cycles/${cycleId}/total-summary`
-  );
+  const url = new URL(`${API_BASE}/api/v1/compensation/cycles/${cycleId}/total-summary`, window.location.origin);
+  if (filters?.search) url.searchParams.set('search', filters.search);
+  if (filters?.department && filters.department !== 'all') url.searchParams.set('department', filters.department);
+  if (filters?.promotionOnly) url.searchParams.set('promotionOnly', 'true');
+  const res = await authedFetch(url.pathname + url.search);
   return readApiData<CompensationTotalSummaryRow[]>(
     res,
     `Failed to load compensation total summary: ${res.status}`
   );
+}
+
+
+export async function downloadCompensationFilteredExport(
+  cycleId: number,
+  filters?: { search?: string; department?: string; promotionOnly?: boolean }
+): Promise<{ csv: string; metadata: Record<string, string | null> }> {
+  requireApi();
+  const url = new URL(`${API_BASE}/api/v1/compensation/cycles/${cycleId}/total-summary.csv`, window.location.origin);
+  if (filters?.search) url.searchParams.set('search', filters.search);
+  if (filters?.department && filters.department !== 'all') url.searchParams.set('department', filters.department);
+  if (filters?.promotionOnly) url.searchParams.set('promotionOnly', 'true');
+  const res = await authedFetch(url.pathname + url.search);
+  if (!res.ok) throw await parseError(res, `Failed to export compensation summary: ${res.status}`);
+  return {
+    csv: await res.text(),
+    metadata: {
+      schemaVersion: res.headers.get('x-export-schema-version'),
+      cycleId: res.headers.get('x-export-cycle-id'),
+      generatedAt: res.headers.get('x-export-generated-at'),
+      filterSummary: res.headers.get('x-export-filter-summary')
+    }
+  };
 }
 
 export async function saveEmployeeCyclePlan(
