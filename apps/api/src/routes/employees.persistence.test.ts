@@ -164,6 +164,7 @@ describe('employees persistence path', () => {
 
     const rosterRes = await request(app).get('/api/v1/employees');
     expect(rosterRes.status).toBe(200);
+    expect(rosterRes.body.data).toHaveLength(employeesTable.length);
     expect(rosterRes.body.data[0].id).toBe('E300');
     const selectSqlCalls = mockQuery.mock.calls.map((call) => String(call[0]));
     expect(selectSqlCalls.some((sql) => sql.includes('FROM employees'))).toBe(true);
