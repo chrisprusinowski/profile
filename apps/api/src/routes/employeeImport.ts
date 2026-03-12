@@ -1,87 +1,111 @@
 import { parse } from 'csv-parse/sync';
 
-export const REQUIRED_COLUMNS = [
-  'id',
-  'name',
-  'email',
+export const CANONICAL_COLUMNS = [
+  'employee_id',
+  'first_name',
+  'last_name',
+  'full_name',
+  'manager_name',
+  'manager_id',
+  'manager_email',
+  'executive_name',
+  'job_title',
+  'job_family_group',
+  'job_family',
+  'level',
+  'start_date',
+  'hire_date',
+  'location',
+  'geo',
+  'business_entity',
+  'employment_classification',
+  'flsa_status',
+  'hourly_rate',
+  'current_salary',
+  'range_low',
+  'range_mid',
+  'range_high',
+  'compa_ratio',
+  'bonus_target_percent',
   'department',
-  'title',
-  'salary',
-  'manager',
-  'hire_date'
+  'total_cash',
+  'total_comp'
 ] as const;
 
-export const OPTIONAL_COLUMNS = ['position_type', 'geography', 'level'] as const;
-
-export type CanonicalEmployeeImportColumn =
-  | (typeof REQUIRED_COLUMNS)[number]
-  | (typeof OPTIONAL_COLUMNS)[number]
-  | 'manager_email';
+export type CanonicalEmployeeImportColumn = (typeof CANONICAL_COLUMNS)[number];
 
 const HEADER_ALIASES: Record<string, CanonicalEmployeeImportColumn> = {
-  id: 'id', employeeid: 'id', empid: 'id', eid: 'id', employeenumber: 'id',
-  name: 'name', fullname: 'name', employeename: 'name', displayname: 'name',
-  email: 'email', emailaddress: 'email', mail: 'email', workemail: 'email',
-  department: 'department', dept: 'department', division: 'department', team: 'department', businessunit: 'department',
-  title: 'title', jobtitle: 'title', role: 'title', jobname: 'title',
-  salary: 'salary', basesalary: 'salary', annualsalary: 'salary', basepay: 'salary',
-  compensation: 'salary', pay: 'salary', wage: 'salary', currentsalary: 'salary',
-  manager: 'manager', managername: 'manager', supervisor: 'manager', reportsto: 'manager', mgr: 'manager',
-  hiredate: 'hire_date', hire_date: 'hire_date', startdate: 'hire_date', dateofhire: 'hire_date', joindate: 'hire_date',
-  positiontype: 'position_type', position_type: 'position_type', emptype: 'position_type', employeetype: 'position_type',
-  geography: 'geography', geo: 'geography', location: 'geography', region: 'geography', country: 'geography',
+  id: 'employee_id', employeeid: 'employee_id', empid: 'employee_id', eid: 'employee_id', employeenumber: 'employee_id',
+  firstname: 'first_name', lastname: 'last_name',
+  name: 'full_name', fullname: 'full_name', employeename: 'full_name', displayname: 'full_name',
+  manager: 'manager_name', managername: 'manager_name', supervisor: 'manager_name', reportsto: 'manager_name', mgr: 'manager_name',
+  managerid: 'manager_id',
+  manageremail: 'manager_email', manager_email: 'manager_email', managermail: 'manager_email',
+  execname: 'executive_name', executivename: 'executive_name',
+  title: 'job_title', jobtitle: 'job_title', role: 'job_title', jobname: 'job_title',
+  jobfamilygroup: 'job_family_group', jobfamily: 'job_family',
   level: 'level', grade: 'level', band: 'level', joblevel: 'level',
-  manageremail: 'manager_email', manager_email: 'manager_email', managermail: 'manager_email'
+  startdate: 'start_date',
+  hiredate: 'hire_date', dateofhire: 'hire_date', joindate: 'hire_date',
+  location: 'location', geography: 'geo', geo: 'geo', region: 'geo', country: 'geo',
+  businessentity: 'business_entity', legalentity: 'business_entity',
+  employmentclassification: 'employment_classification', employeeclassification: 'employment_classification',
+  flsastatus: 'flsa_status',
+  hourlyrate: 'hourly_rate',
+  salary: 'current_salary', basesalary: 'current_salary', annualsalary: 'current_salary', basepay: 'current_salary',
+  compensation: 'current_salary', pay: 'current_salary', wage: 'current_salary', currentsalary: 'current_salary',
+  low: 'range_low', rangelow: 'range_low', minimum: 'range_low',
+  mid: 'range_mid', midpoint: 'range_mid', rangemid: 'range_mid', p50basesalary: 'range_mid',
+  high: 'range_high', rangehigh: 'range_high', maximum: 'range_high',
+  comparatio: 'compa_ratio',
+  bonustarget: 'bonus_target_percent', bonustargetpercent: 'bonus_target_percent',
+  department: 'department', dept: 'department', division: 'department', team: 'department', businessunit: 'department',
+  totalcash: 'total_cash',
+  totalcomp: 'total_comp'
 };
 
-const KNOWN_COLUMNS = new Set<CanonicalEmployeeImportColumn>([
-  ...REQUIRED_COLUMNS,
-  ...OPTIONAL_COLUMNS,
-  'manager_email'
-]);
-
-const RECOMMENDED_FIELDS = ['email', 'department', 'title'] as const;
-
-export type RowValidationError = { row: number; message: string };
 export type RowValidationWarning = { row: number; message: string };
+
+export type ImportColumnMapping = {
+  sourceColumn: string;
+  canonicalColumn: CanonicalEmployeeImportColumn | null;
+  isRecognized: boolean;
+  confidence: number;
+};
 
 export type NormalizedEmployeeImportRow = {
   rowNumber: number;
-  id: string;
-  name: string;
-  email: string;
-  department: string;
-  title: string;
-  salary: number;
-  manager: string;
-  managerEmail: string;
-  hireDate: string;
-  positionType: string;
-  geography: string;
-  level: string;
+  employeeId: string;
+  normalized: Partial<Record<CanonicalEmployeeImportColumn, string | number | null>>;
+  unmappedAttributes: Record<string, string>;
+  warnings: string[];
 };
 
 export type ImportPreview = {
   rowsReceived: number;
-  rowsValid: number;
-  rowsInvalid: number;
-  errors: RowValidationError[];
+  rowsNormalized: number;
+  rowsWithWarnings: number;
+  errors: Array<{ row: number; message: string }>;
   warnings: RowValidationWarning[];
 };
 
 export type ImportPreparation = {
-  validRows: NormalizedEmployeeImportRow[];
+  rows: NormalizedEmployeeImportRow[];
   preview: ImportPreview;
-  unknownColumns: string[];
+  columnMappings: ImportColumnMapping[];
 };
 
 function normalizeHeaderKey(header: string): string {
   return header.trim().toLowerCase().replace(/[\s\-_]+/g, '').replace(/[^a-z0-9]/g, '');
 }
 
-export function toCanonicalHeader(header: string): string {
+function defaultCanonicalHeader(header: string): string {
+  return header.trim().toLowerCase().replace(/[\s\-]+/g, '_');
+}
+
+export function toCanonicalHeader(header: string): CanonicalEmployeeImportColumn | null {
   const alias = HEADER_ALIASES[normalizeHeaderKey(header)];
-  return alias ?? header.trim().toLowerCase().replace(/[\s\-]+/g, '_');
+  return alias ?? null;
 }
 
 export function parseCsv(text: string): Record<string, string>[] {
@@ -99,31 +123,36 @@ export function parseCsv(text: string): Record<string, string>[] {
   ));
 }
 
-export function normalizeText(value: string | undefined): string {
+function normalizeText(value: string | undefined): string {
   return (value ?? '').trim().replace(/\s{2,}/g, ' ');
 }
 
-export function normalizeEmail(value: string | undefined): string {
+function normalizeEmail(value: string | undefined): string {
   return normalizeText(value).toLowerCase();
 }
 
-function looksLikeEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-export function parseSalary(value: string | undefined): number | null {
+export function parseLooseNumber(value: string | undefined): number | null {
   const raw = normalizeText(value);
   if (!raw) return null;
-  const cleaned = raw.replace(/[,$€£¥\s]/g, '');
-  if (!cleaned) return null;
-  const parsed = Number.parseFloat(cleaned);
-  if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return Math.round(parsed * 100) / 100;
+  const stripped = raw
+    .replace(/compa\s*ratio\s*:?/i, '')
+    .replace(/[^0-9.,\-%]/g, '')
+    .trim();
+  if (!stripped) return null;
+
+  const hasPercent = stripped.includes('%');
+  const normalized = stripped.replace(/,/g, '').replace(/%/g, '');
+  if (!normalized) return null;
+
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed)) return null;
+
+  return hasPercent ? parsed : parsed;
 }
 
 export function parseDate(value: string | undefined): string | null {
   const raw = normalizeText(value);
-  if (!raw) return '';
+  if (!raw) return null;
 
   const MONTHS: Record<string, number> = {
     jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
@@ -135,7 +164,7 @@ export function parseDate(value: string | undefined): string | null {
   let month = 0;
   let day = 0;
 
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw);
+  const iso = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(raw);
   if (iso) {
     year = Number(iso[1]);
     month = Number(iso[2]);
@@ -169,161 +198,158 @@ export function parseDate(value: string | undefined): string | null {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export function prepareEmployeeImport(csvContent: string): ImportPreparation {
-  const errors: RowValidationError[] = [];
-  const warnings: RowValidationWarning[] = [];
+function deriveNameParts(fullName: string): { firstName: string | null; lastName: string | null } {
+  const value = normalizeText(fullName);
+  if (!value) return { firstName: null, lastName: null };
+  const pieces = value.split(' ');
+  if (pieces.length === 1) return { firstName: pieces[0], lastName: null };
+  return { firstName: pieces[0], lastName: pieces.slice(1).join(' ') };
+}
 
+function chooseEmployeeId(normalized: Partial<Record<CanonicalEmployeeImportColumn, string | number | null>>): string {
+  const fromCanonical = normalizeText(String(normalized.employee_id ?? ''));
+  if (fromCanonical) return fromCanonical;
+  const fullName = normalizeText(String(normalized.full_name ?? ''));
+  if (fullName) return `auto-${fullName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  return 'auto-missing-id';
+}
+
+export function prepareEmployeeImport(csvContent: string): ImportPreparation {
   let rawRows: Record<string, string>[] = [];
   try {
     rawRows = parseCsv(csvContent);
   } catch {
     return {
-      validRows: [],
+      rows: [],
       preview: {
         rowsReceived: 0,
-        rowsValid: 0,
-        rowsInvalid: 0,
-        errors: [{ row: 1, message: 'CSV is empty or malformed' }],
+        rowsNormalized: 0,
+        rowsWithWarnings: 0,
+        errors: [{ row: 1, message: 'CSV is unreadable or malformed' }],
         warnings: []
       },
-      unknownColumns: []
+      columnMappings: []
     };
   }
 
   if (rawRows.length === 0) {
     return {
-      validRows: [],
+      rows: [],
       preview: {
         rowsReceived: 0,
-        rowsValid: 0,
-        rowsInvalid: 0,
+        rowsNormalized: 0,
+        rowsWithWarnings: 0,
         errors: [{ row: 1, message: 'CSV must include at least one data row' }],
         warnings: []
       },
-      unknownColumns: []
+      columnMappings: []
     };
   }
 
-  const originalHeaders = Object.keys(rawRows[0] ?? {});
-  const canonicalHeaderMap = new Map<string, string>();
-  for (const header of originalHeaders) {
-    canonicalHeaderMap.set(toCanonicalHeader(header), header);
-  }
-
-  const missingColumns = REQUIRED_COLUMNS.filter((column) => !canonicalHeaderMap.has(column));
-  if (missingColumns.length > 0) {
+  const headerKeys = Object.keys(rawRows[0] ?? {});
+  const columnMappings: ImportColumnMapping[] = headerKeys.map((sourceColumn) => {
+    const mapped = toCanonicalHeader(sourceColumn);
     return {
-      validRows: [],
-      preview: {
-        rowsReceived: rawRows.length,
-        rowsValid: 0,
-        rowsInvalid: rawRows.length,
-        errors: [{ row: 1, message: `Missing required columns: ${missingColumns.join(', ')}` }],
-        warnings: []
-      },
-      unknownColumns: Array.from(canonicalHeaderMap.keys()).filter((header) => !KNOWN_COLUMNS.has(header as CanonicalEmployeeImportColumn))
+      sourceColumn,
+      canonicalColumn: mapped,
+      isRecognized: Boolean(mapped),
+      confidence: mapped ? 1 : 0
     };
-  }
+  });
 
-  const unknownColumns = Array.from(canonicalHeaderMap.keys()).filter((header) => !KNOWN_COLUMNS.has(header as CanonicalEmployeeImportColumn));
-
-  const seenIds = new Set<string>();
-  const seenEmails = new Set<string>();
-  const validRows: NormalizedEmployeeImportRow[] = [];
-
-  rawRows.forEach((sourceRow, index) => {
+  const warnings: RowValidationWarning[] = [];
+  const rows = rawRows.map((sourceRow, index) => {
     const rowNumber = index + 2;
-    const read = (canonical: string): string => {
-      const original = canonicalHeaderMap.get(canonical);
-      return original ? sourceRow[original] ?? '' : '';
-    };
+    const normalized: Partial<Record<CanonicalEmployeeImportColumn, string | number | null>> = {};
+    const unmappedAttributes: Record<string, string> = {};
+    const rowWarnings: string[] = [];
 
-    const id = normalizeText(read('id'));
-    const name = normalizeText(read('name'));
-    const email = normalizeEmail(read('email'));
-    const department = normalizeText(read('department'));
-    const title = normalizeText(read('title'));
-    const rawManager = normalizeText(read('manager'));
-    const rawManagerEmail = normalizeEmail(read('manager_email'));
-    const managerLooksLikeEmail = !rawManagerEmail && looksLikeEmail(rawManager);
-    const manager = managerLooksLikeEmail ? '' : rawManager;
-    const managerEmail = managerLooksLikeEmail ? normalizeEmail(rawManager) : rawManagerEmail;
-    const positionType = normalizeText(read('position_type'));
-    const geography = normalizeText(read('geography'));
-    const level = normalizeText(read('level'));
-    const salary = parseSalary(read('salary'));
-    const hireDate = parseDate(read('hire_date'));
+    for (const [sourceColumn, rawValue] of Object.entries(sourceRow)) {
+      const mapped = toCanonicalHeader(sourceColumn);
+      const value = normalizeText(rawValue);
+      if (!mapped) {
+        unmappedAttributes[defaultCanonicalHeader(sourceColumn)] = rawValue;
+        continue;
+      }
 
-    const rowErrors: string[] = [];
-
-    if (!name) rowErrors.push('Missing name');
-    if (salary === null) rowErrors.push('Salary could not be parsed');
-
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      rowErrors.push(`Invalid email: "${read('email')}"`);
+      switch (mapped) {
+        case 'manager_email':
+          normalized[mapped] = normalizeEmail(value) || null;
+          break;
+        case 'current_salary':
+        case 'hourly_rate':
+        case 'range_low':
+        case 'range_mid':
+        case 'range_high':
+        case 'compa_ratio':
+        case 'bonus_target_percent':
+        case 'total_cash':
+        case 'total_comp': {
+          const parsed = parseLooseNumber(value);
+          normalized[mapped] = parsed;
+          if (value && parsed === null) {
+            rowWarnings.push(`Could not parse numeric field ${mapped}; preserved raw value`);
+            unmappedAttributes[`raw_${mapped}`] = rawValue;
+          }
+          break;
+        }
+        case 'hire_date':
+        case 'start_date': {
+          const parsed = parseDate(value);
+          normalized[mapped] = parsed;
+          if (value && !parsed) {
+            rowWarnings.push(`Could not parse date field ${mapped}; preserved raw value`);
+            unmappedAttributes[`raw_${mapped}`] = rawValue;
+          }
+          break;
+        }
+        default:
+          normalized[mapped] = value || null;
+      }
     }
 
-    if (hireDate === null) rowErrors.push(`Invalid hire_date: "${read('hire_date')}"`);
-
-    if (id && seenIds.has(id.toLowerCase())) {
-      rowErrors.push(`Duplicate id in file: "${id}"`);
-    }
-    if (id) seenIds.add(id.toLowerCase());
-
-    if (email && seenEmails.has(email)) {
-      rowErrors.push(`Duplicate email in file: "${email}"`);
-    }
-    if (email) seenEmails.add(email);
-
-    if (!id) {
-      warnings.push({ row: rowNumber, message: 'Missing id, UUID will be generated on commit' });
+    if (!normalized.full_name && (normalized.first_name || normalized.last_name)) {
+      normalized.full_name = normalizeText(`${normalized.first_name ?? ''} ${normalized.last_name ?? ''}`);
     }
 
-    for (const field of RECOMMENDED_FIELDS) {
-      const value = field === 'email' ? email : field === 'department' ? department : title;
-      if (!value) warnings.push({ row: rowNumber, message: `Recommended field missing: ${field}` });
+    if (normalized.full_name && (!normalized.first_name || !normalized.last_name)) {
+      const derived = deriveNameParts(String(normalized.full_name));
+      if (!normalized.first_name) normalized.first_name = derived.firstName;
+      if (!normalized.last_name) normalized.last_name = derived.lastName;
     }
 
-    if (managerLooksLikeEmail) {
-      warnings.push({
-        row: rowNumber,
-        message: 'manager looked like an email; normalized to manager_email for manager-scope visibility'
-      });
+    if (!normalized.employee_id) {
+      rowWarnings.push('Missing employee identifier; generated fallback id during ingest');
     }
 
-    if (rowErrors.length > 0) {
-      rowErrors.forEach((message) => errors.push({ row: rowNumber, message }));
-      return;
+    if (!normalized.current_salary) {
+      rowWarnings.push('Missing current salary');
     }
 
-    const normalizedSalary = salary as number;
+    if (!normalized.bonus_target_percent) {
+      rowWarnings.push('No bonus target provided');
+    }
 
-    validRows.push({
+    rowWarnings.forEach((message) => warnings.push({ row: rowNumber, message }));
+
+    return {
       rowNumber,
-      id,
-      name,
-      email,
-      department,
-      title,
-      salary: normalizedSalary,
-      manager,
-      managerEmail,
-      hireDate: hireDate ?? '',
-      positionType,
-      geography,
-      level
-    });
+      employeeId: chooseEmployeeId(normalized),
+      normalized,
+      unmappedAttributes,
+      warnings: rowWarnings
+    };
   });
 
   return {
-    validRows,
+    rows,
     preview: {
       rowsReceived: rawRows.length,
-      rowsValid: validRows.length,
-      rowsInvalid: rawRows.length - validRows.length,
-      errors,
+      rowsNormalized: rows.length,
+      rowsWithWarnings: rows.filter((row) => row.warnings.length > 0).length,
+      errors: [],
       warnings
     },
-    unknownColumns
+    columnMappings
   };
 }

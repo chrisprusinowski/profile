@@ -57,16 +57,15 @@ describe('employees persistence path', () => {
 
     const app = await makeApp();
     const csv = [
-      'id,name,email,department,title,salary,manager,hire_date',
-      'E100,Jane,jane@demo.com,Eng,Engineer,100000,Leader,2024-01-01'
+      'EID,Employee Name,Current Salary,Manager,Hire Date',
+      'E100,Jane,100000,Leader,2024-01-01'
     ].join('\n');
 
     const response = await request(app).post('/api/v1/employees/import-csv').send({ csvContent: csv });
     expect(response.status).toBe(200);
     expect(response.body.data).toMatchObject({
       rowsReceived: 1,
-      rowsValid: 1,
-      rowsInvalid: 0
+      rowsNormalized: 1
     });
     expect(txQuery).not.toHaveBeenCalled();
   });
@@ -74,6 +73,7 @@ describe('employees persistence path', () => {
   it('successful commit persists to DB and returns counters', async () => {
     const txQuery = vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [], rowCount: 0 };
+      if (sql.includes('INSERT INTO import_batches')) return { rows: [{ id: 77 }], rowCount: 1 };
       if (sql.includes('INSERT INTO employees')) {
         return { rows: [{ inserted: (params?.[0] as string) === 'E100' }], rowCount: 1 };
       }
@@ -83,9 +83,9 @@ describe('employees persistence path', () => {
 
     const app = await makeApp();
     const csv = [
-      'id,name,email,department,title,salary,manager,hire_date',
-      'E100,Jane,jane@demo.com,Eng,Engineer,100000,Leader,2024-01-01',
-      'E101,John,john@demo.com,Eng,Engineer,110000,Leader,2024-01-01'
+      'EID,Employee Name,Current Salary,Manager,Hire Date',
+      'E100,Jane,100000,Leader,2024-01-01',
+      'E101,John,110000,Leader,2024-01-01'
     ].join('\n');
 
     const response = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });
@@ -94,26 +94,31 @@ describe('employees persistence path', () => {
       rowsReceived: 2,
       rowsInserted: 1,
       rowsUpdated: 1,
-      rowsRejected: 0
+      rowsWithWarnings: 2,
+      batchId: 77
     });
     expect(txQuery).toHaveBeenCalledWith('COMMIT');
   });
 
-  it('rejects commit when invalid rows exist', async () => {
-    const txQuery = vi.fn();
+  it('accepts malformed rows and tracks warnings instead of rejecting commit', async () => {
+    const txQuery = vi.fn(async (sql: string) => {
+      if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [], rowCount: 0 };
+      if (sql.includes('INSERT INTO import_batches')) return { rows: [{ id: 99 }], rowCount: 1 };
+      if (sql.includes('INSERT INTO employees')) return { rows: [{ inserted: true }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
     mockConnect.mockResolvedValue({ query: txQuery, release: vi.fn() });
 
     const app = await makeApp();
     const csv = [
-      'id,name,email,department,title,salary,manager,hire_date',
-      'E1,,bad-email,Eng,Engineer,abc,Leader,2024-13-01'
+      'EID,Employee Name,Current Salary,Hire Date',
+      ',No Salary,abc,2024-13-01'
     ].join('\n');
 
     const response = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });
-    expect(response.status).toBe(400);
-    expect(response.body.data.rowsRejected).toBe(1);
-    expect(response.body.data.errors.length).toBeGreaterThan(0);
-    expect(txQuery).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(response.body.data.rowsReceived).toBe(1);
+    expect(response.body.data.rowsWithWarnings).toBe(1);
   });
 
   it('roster shows imported rows immediately after import from same source table', async () => {
@@ -122,20 +127,21 @@ describe('employees persistence path', () => {
     mockConnect.mockResolvedValue({
       query: vi.fn(async (sql: string, params?: unknown[]) => {
         if (sql === 'BEGIN' || sql === 'COMMIT') return { rows: [], rowCount: 0 };
+        if (sql.includes('INSERT INTO import_batches')) return { rows: [{ id: 120 }], rowCount: 1 };
         if (sql.includes('INSERT INTO employees')) {
           employeesTable.push({
             id: params?.[0],
             name: params?.[1],
-            email: params?.[2],
+            email: null,
             department: params?.[3],
             title: params?.[4],
             positionType: null,
             geography: null,
-            level: null,
-            salary: Number(params?.[8]),
+            level: params?.[7],
+            salary: Number(params?.[8] ?? 0),
             manager: params?.[9],
             managerEmail: params?.[10],
-            hireDate: String(params?.[11])
+            hireDate: String(params?.[11] ?? '')
           });
           return { rows: [{ inserted: true }], rowCount: 1 };
         }
@@ -155,8 +161,8 @@ describe('employees persistence path', () => {
 
     const app = await makeApp();
     const csv = [
-      'id,name,email,department,title,salary,manager,hire_date',
-      'E300,Roster Person,roster@demo.com,Ops,Analyst,90000,Boss,2024-02-01'
+      'EID,Employee Name,Current Salary,Department,Job Title,Manager,Hire Date',
+      'E300,Roster Person,90000,Ops,Analyst,Boss,2024-02-01'
     ].join('\n');
 
     const importRes = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });
@@ -173,6 +179,7 @@ describe('employees persistence path', () => {
   it('rolls back transaction and surfaces DB error', async () => {
     const txQuery = vi.fn(async (sql: string) => {
       if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [], rowCount: 0 };
+      if (sql.includes('INSERT INTO import_batches')) return { rows: [{ id: 44 }], rowCount: 1 };
       if (sql.includes('INSERT INTO employees')) throw new Error('db exploded');
       return { rows: [], rowCount: 0 };
     });
@@ -180,8 +187,8 @@ describe('employees persistence path', () => {
 
     const app = await makeApp();
     const csv = [
-      'id,name,email,department,title,salary,manager,hire_date',
-      'E400,Jane,jane@demo.com,Eng,Engineer,100000,Leader,2024-01-01'
+      'EID,Employee Name,Current Salary,Manager,Hire Date',
+      'E400,Jane,100000,Leader,2024-01-01'
     ].join('\n');
 
     const response = await request(app).post('/api/v1/employees/import-csv').send({ action: 'commit', csvContent: csv });

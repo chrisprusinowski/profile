@@ -11,7 +11,7 @@ import { pool } from '../db.js';
 import { findBestPayRange, type PayRangeRecord } from '../payRanges.js';
 import { logAuditEvent } from '../audit.js';
 import { recalculateRecommendationAmountsForEmployee } from '../recommendationCalculations.js';
-import { prepareEmployeeImport } from './employeeImport.js';
+import { prepareEmployeeImport, type CanonicalEmployeeImportColumn } from './employeeImport.js';
 
 export const employeesRouter = Router();
 
@@ -349,13 +349,13 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
     }
 
     const prepared = prepareEmployeeImport(csvContent);
-    const { rowsReceived, rowsValid, rowsInvalid, errors, warnings } = prepared.preview;
+    const { rowsReceived, rowsNormalized, rowsWithWarnings, errors, warnings } = prepared.preview;
 
     console.info('[employees.import] Parsed and validated CSV', {
       actorEmail: req.user?.email,
       rowsReceived,
-      rowsValid,
-      rowsRejected: rowsInvalid
+      rowsNormalized,
+      rowsWithWarnings
     });
 
     if (action === 'preview') {
@@ -363,10 +363,11 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
         success: true,
         data: {
           rowsReceived,
-          rowsValid,
-          rowsInvalid,
+          rowsNormalized,
+          rowsWithWarnings,
           errors,
-          warnings
+          warnings,
+          columnMappings: prepared.columnMappings
         }
       });
       return;
@@ -380,23 +381,7 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
           rowsReceived,
           rowsInserted: 0,
           rowsUpdated: 0,
-          rowsRejected: rowsInvalid
-        }
-      });
-      return;
-    }
-
-    if (rowsInvalid > 0 || errors.length > 0) {
-      res.status(400).json({
-        success: false,
-        error: 'CSV validation failed. Fix errors and retry commit.',
-        data: {
-          rowsReceived,
-          rowsInserted: 0,
-          rowsUpdated: 0,
-          rowsRejected: rowsInvalid,
-          errors,
-          warnings
+          rowsWithWarnings: rowsWithWarnings
         }
       });
       return;
@@ -405,67 +390,127 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
     console.info('[employees.import] Starting import transaction', {
       actorEmail: req.user?.email,
       rowsReceived,
-      rowsValid,
-      rowsRejected: rowsInvalid,
+      rowsNormalized,
+      rowsWithWarnings,
       dbTarget: await loadDbTargetInfo()
     });
 
     let inserted = 0;
     let updated = 0;
+    let batchId = 0;
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      for (const row of prepared.validRows) {
-        const validation = employeeSchema.safeParse({
-          id: row.id || randomUUID(),
-          name: row.name,
-          email: row.email,
-          department: row.department,
-          title: row.title,
-          positionType: row.positionType,
-          geography: row.geography,
-          level: row.level,
-          salary: row.salary,
-          manager: row.manager,
-          managerEmail: row.managerEmail,
-          hireDate: row.hireDate
-        });
+      const batchInsert = await client.query<{ id: number }>(
+        `INSERT INTO import_batches (source_type, source_name, actor_email, action, status, rows_received, rows_normalized, rows_with_warnings, rows_failed, warnings, metadata)
+         VALUES ('csv', NULLIF($1, ''), $2, 'commit', 'processed', $3, $4, $5, 0, $6::jsonb, $7::jsonb)
+         RETURNING id`,
+        [req.body?.sourceName ?? '', req.user?.email ?? null, rowsReceived, rowsNormalized, rowsWithWarnings, JSON.stringify(warnings), JSON.stringify({ errors })]
+      );
+      batchId = batchInsert.rows[0]?.id ?? 0;
 
-        if (!validation.success) {
-          throw new Error(`Row ${row.rowNumber} schema validation failed: ${validation.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`);
+      for (const mapping of prepared.columnMappings) {
+        await client.query(
+          `INSERT INTO import_column_mappings (batch_id, source_column, canonical_column, is_recognized, confidence)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [batchId, mapping.sourceColumn, mapping.canonicalColumn, mapping.isRecognized, mapping.confidence]
+        );
+      }
+
+      for (const row of prepared.rows) {
+        const normalized = row.normalized;
+        const normalizedForStorage: Record<string, string | number | null> = {};
+        for (const [key, value] of Object.entries(normalized)) {
+          normalizedForStorage[key] = value ?? null;
         }
 
+        const employeeId = String(normalized.employee_id ?? row.employeeId ?? randomUUID());
+        const fullName = String(normalized.full_name ?? '').trim();
+        const firstName = String(normalized.first_name ?? '').trim();
+        const lastName = String(normalized.last_name ?? '').trim();
+        const currentSalary = typeof normalized.current_salary === 'number' ? normalized.current_salary : null;
+
+        const valuesByCanonical: Partial<Record<CanonicalEmployeeImportColumn, string | number | null>> = {
+          ...normalized,
+          employee_id: employeeId,
+          full_name: fullName || null,
+          first_name: firstName || null,
+          last_name: lastName || null
+        };
+
+        await client.query(
+          `INSERT INTO imported_employee_rows (batch_id, row_number, employee_id, raw_row_json, normalized_row_json, unmapped_attributes, row_warnings)
+           VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb)`,
+          [batchId, row.rowNumber, employeeId, JSON.stringify(row), JSON.stringify(normalizedForStorage), JSON.stringify(row.unmappedAttributes), JSON.stringify(row.warnings)]
+        );
+
         const upsertResult = await client.query(
-          `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, hire_date)
-           VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), NULLIF($12, '')::date)
+          `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, hire_date, first_name, last_name, full_name, job_family_group, job_family, business_entity, employment_classification, flsa_status, hourly_rate, range_low, range_mid, range_high, compa_ratio, bonus_target_percent, total_cash, total_comp, raw_attributes, import_batch_id)
+           VALUES ($1, NULLIF($2, ''), NULLIF(lower($3), ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), NULLIF($12, '')::date, NULLIF($13, ''), NULLIF($14, ''), NULLIF($15, ''), NULLIF($16, ''), NULLIF($17, ''), NULLIF($18, ''), NULLIF($19, ''), NULLIF($20, ''), $21, $22, $23, $24, $25, $26, $27, $28, $29::jsonb, $30)
            ON CONFLICT (id)
-           DO UPDATE SET name = EXCLUDED.name,
+           DO UPDATE SET name = COALESCE(EXCLUDED.name, employees.name),
                          email = EXCLUDED.email,
                          department = EXCLUDED.department,
                          title = EXCLUDED.title,
                          position_type = EXCLUDED.position_type,
                          geography = EXCLUDED.geography,
                          level = EXCLUDED.level,
-                         salary = EXCLUDED.salary,
+                         salary = COALESCE(EXCLUDED.salary, employees.salary),
                          manager = EXCLUDED.manager,
                          manager_email = EXCLUDED.manager_email,
                          hire_date = EXCLUDED.hire_date,
+                         first_name = EXCLUDED.first_name,
+                         last_name = EXCLUDED.last_name,
+                         full_name = EXCLUDED.full_name,
+                         job_family_group = EXCLUDED.job_family_group,
+                         job_family = EXCLUDED.job_family,
+                         business_entity = EXCLUDED.business_entity,
+                         employment_classification = EXCLUDED.employment_classification,
+                         flsa_status = EXCLUDED.flsa_status,
+                         hourly_rate = EXCLUDED.hourly_rate,
+                         range_low = EXCLUDED.range_low,
+                         range_mid = EXCLUDED.range_mid,
+                         range_high = EXCLUDED.range_high,
+                         compa_ratio = EXCLUDED.compa_ratio,
+                         bonus_target_percent = EXCLUDED.bonus_target_percent,
+                         total_cash = EXCLUDED.total_cash,
+                         total_comp = EXCLUDED.total_comp,
+                         raw_attributes = COALESCE(employees.raw_attributes, '{}'::jsonb) || COALESCE(EXCLUDED.raw_attributes, '{}'::jsonb),
+                         import_batch_id = EXCLUDED.import_batch_id,
                          updated_at = NOW()
            RETURNING xmax = 0 AS inserted`,
           [
-            validation.data.id,
-            validation.data.name,
-            validation.data.email ?? '',
-            validation.data.department ?? '',
-            validation.data.title ?? '',
-            validation.data.positionType ?? '',
-            validation.data.geography ?? '',
-            validation.data.level ?? '',
-            validation.data.salary,
-            validation.data.manager ?? '',
-            validation.data.managerEmail ?? '',
-            validation.data.hireDate ?? ''
+            employeeId,
+            fullName,
+            valuesByCanonical.manager_email ?? '',
+            valuesByCanonical.department ?? '',
+            valuesByCanonical.job_title ?? '',
+            '',
+            valuesByCanonical.geo ?? valuesByCanonical.location ?? '',
+            valuesByCanonical.level ?? '',
+            currentSalary,
+            valuesByCanonical.manager_name ?? '',
+            valuesByCanonical.manager_email ?? '',
+            valuesByCanonical.hire_date ?? valuesByCanonical.start_date ?? '',
+            firstName,
+            lastName,
+            fullName,
+            valuesByCanonical.job_family_group ?? '',
+            valuesByCanonical.job_family ?? '',
+            valuesByCanonical.business_entity ?? '',
+            valuesByCanonical.employment_classification ?? '',
+            valuesByCanonical.flsa_status ?? '',
+            typeof valuesByCanonical.hourly_rate === 'number' ? valuesByCanonical.hourly_rate : null,
+            typeof valuesByCanonical.range_low === 'number' ? valuesByCanonical.range_low : null,
+            typeof valuesByCanonical.range_mid === 'number' ? valuesByCanonical.range_mid : null,
+            typeof valuesByCanonical.range_high === 'number' ? valuesByCanonical.range_high : null,
+            typeof valuesByCanonical.compa_ratio === 'number' ? valuesByCanonical.compa_ratio : null,
+            typeof valuesByCanonical.bonus_target_percent === 'number' ? valuesByCanonical.bonus_target_percent : null,
+            typeof valuesByCanonical.total_cash === 'number' ? valuesByCanonical.total_cash : null,
+            typeof valuesByCanonical.total_comp === 'number' ? valuesByCanonical.total_comp : null,
+            JSON.stringify(row.unmappedAttributes),
+            batchId
           ]
         );
 
@@ -475,25 +520,29 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
 
         if (upsertResult.rows[0]?.inserted) inserted += 1;
         else updated += 1;
+
+        await recalculateRecommendationAmountsForEmployee(employeeId);
       }
 
       await client.query('COMMIT');
       console.info('[employees.import] Import transaction committed', {
         actorEmail: req.user?.email,
         rowsReceived,
-        rowsValid,
+        rowsNormalized,
         rowsInserted: inserted,
         rowsUpdated: updated,
-        rowsRejected: rowsInvalid
+        rowsWithWarnings,
+        batchId
       });
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('[employees.import] Import transaction rolled back', {
         actorEmail: req.user?.email,
         rowsReceived,
-        rowsValid,
+        rowsNormalized,
         rowsInserted: inserted,
         rowsUpdated: updated,
+        rowsWithWarnings,
         error: error instanceof Error ? error.message : String(error)
       });
       throw error;
@@ -508,11 +557,11 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       targetId: 'import-csv',
       metadata: {
         rowsReceived,
-        rowsValid,
+        rowsNormalized,
         rowsInserted: inserted,
         rowsUpdated: updated,
-        rowsRejected: rowsInvalid,
-        unknownColumns: prepared.unknownColumns
+        rowsWithWarnings,
+        batchId
       }
     });
 
@@ -522,7 +571,8 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
         rowsReceived,
         rowsInserted: inserted,
         rowsUpdated: updated,
-        rowsRejected: rowsInvalid
+        rowsWithWarnings,
+        batchId
       }
     });
   } catch (error) {
