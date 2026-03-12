@@ -115,9 +115,8 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
           <div className="alert alert-blue" style={{ marginBottom: 20 }}>
             <div className="alert-icon">⬆</div>
             <div style={{ flex: 1 }}>
-              <strong>No employees loaded.</strong> Add rows to{' '}
-              <code>data/employees.csv</code> and restart the API, or run the
-              Vite build with the CSV in place to see real data.
+              <strong>No employees loaded.</strong> Import employees from the
+              Employees page to begin planning.
             </div>
           </div>
         )}
@@ -473,8 +472,7 @@ export function Dashboard({ employees, cycle, recommendations }: Props) {
               <div className="alert alert-blue" style={{ margin: 0 }}>
                 <div className="alert-icon">⬆</div>
                 <div>
-                  Add employees to <code>data/employees.csv</code> to begin
-                  planning. See the README for the expected column format.
+                  Import employees to begin planning.
                 </div>
               </div>
             )}

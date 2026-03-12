@@ -258,7 +258,7 @@ export async function updateAppUser(
 }
 
 export async function fetchEmployees(): Promise<Employee[]> {
-  if (!API_BASE) return [];
+  requireApi();
   const res = await authedFetch(`${API_BASE}/api/v1/employees`);
   return readApiData<Employee[]>(
     res,
