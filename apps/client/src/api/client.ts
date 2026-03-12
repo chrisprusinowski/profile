@@ -7,7 +7,9 @@ import type {
   PayRange,
   CompensationCycle,
   CompensationTotalSummaryRow,
-  EmployeeCyclePlanPayload
+  EmployeeCyclePlanPayload,
+  PlannerAuditChange,
+  PlannerWorkflowStatus
 } from '../types.js';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string) || '';
@@ -101,6 +103,7 @@ export function buildCompensationTotalSummaryCsv(
     'enteredGoalAttainmentIndividual',
     'enteredExecReview',
     'enteredNotes',
+    'enteredPlanningStatus',
     'enteredPlannerInputs',
     'derivedCompaRatio',
     'derivedSalaryAfterMerit',
@@ -703,4 +706,48 @@ export async function saveEmployeeCyclePlan(
     }
   );
   await readApiData(res, `Failed to save cycle plan: ${res.status}`);
+}
+
+
+export async function fetchPlannerAudit(
+  cycleId: number,
+  employeeId: string,
+  limit = 25
+): Promise<PlannerAuditChange[]> {
+  requireApi();
+  const url = new URL(`${API_BASE}/api/v1/compensation/cycles/${cycleId}/plans/${encodeURIComponent(employeeId)}/audit`, window.location.origin);
+  url.searchParams.set('limit', String(limit));
+  const res = await authedFetch(url.pathname + url.search);
+  return readApiData<PlannerAuditChange[]>(res, `Failed to load planner audit: ${res.status}`);
+}
+
+export async function bulkUpdateEmployeeCyclePlans(
+  cycleId: number,
+  payload: {
+    employeeIds?: string[];
+    filters?: Record<string, string | boolean>;
+    updates: Partial<EmployeeCyclePlanPayload>;
+  }
+): Promise<{ updated: number; employeeIds: string[] }> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/compensation/cycles/${cycleId}/plans/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return readApiData<{ updated: number; employeeIds: string[] }>(res, `Failed to bulk update cycle plans: ${res.status}`);
+}
+
+export async function updateEmployeePlanStatus(
+  cycleId: number,
+  employeeId: string,
+  status: PlannerWorkflowStatus
+): Promise<void> {
+  requireApi();
+  const res = await authedFetch(`${API_BASE}/api/v1/compensation/cycles/${cycleId}/plans/${encodeURIComponent(employeeId)}/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
+  });
+  await readApiData(res, `Failed to update planner status: ${res.status}`);
 }

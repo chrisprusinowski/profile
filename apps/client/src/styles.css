@@ -1179,3 +1179,12 @@ textarea {
   color: var(--amber-600);
   font-size: 11px;
 }
+
+.planner-grid .sticky-col {
+  box-shadow: 2px 0 0 rgba(15, 23, 42, 0.06);
+}
+
+.planner-grid-wrap {
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+}
