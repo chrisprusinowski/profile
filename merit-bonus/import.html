@@ -52,7 +52,7 @@
     <header class="topbar">
       <div class="topbar-left">
         <div class="page-title">Import Employees</div>
-        <div class="page-subtitle">Upload a CSV file to populate the merit cycle roster</div>
+        <div class="page-subtitle">Upload a CSV file or paste CSV data to populate the merit cycle roster</div>
       </div>
       <div class="topbar-right" id="existing-badge" style="display:none;">
         <span class="badge badge-amber" id="existing-count-badge"></span>
@@ -65,7 +65,7 @@
       <div class="step-indicator">
         <div class="step active" id="si-1">
           <div class="step-num">1</div>
-          <div class="step-label">Upload File</div>
+          <div class="step-label">Upload / Paste</div>
         </div>
         <div class="step-connector" id="conn-1"></div>
         <div class="step" id="si-2">
@@ -79,11 +79,12 @@
         </div>
       </div>
 
-      <!-- ── Step 1: Upload ─────────────────────────────────── -->
+      <!-- ── Step 1: Upload / Paste ──────────────────────────── -->
       <div id="step-1" class="import-step">
         <div class="card">
           <div class="card-body">
 
+            <!-- File upload -->
             <div class="dropzone" id="dropzone">
               <div class="dropzone-icon">↑</div>
               <div class="dropzone-title">Drop your CSV file here</div>
@@ -93,24 +94,51 @@
               <input type="file" id="file-input" accept=".csv,.txt" style="display:none" />
             </div>
 
+            <!-- Divider -->
+            <div style="display:flex; align-items:center; gap:16px; margin:20px 0;">
+              <div style="flex:1; height:1px; background:var(--gray-200);"></div>
+              <div style="font-size:13px; font-weight:600; color:var(--gray-400);">OR</div>
+              <div style="flex:1; height:1px; background:var(--gray-200);"></div>
+            </div>
+
+            <!-- Paste input -->
+            <div>
+              <label for="paste-input" style="font-size:13px; font-weight:600; color:var(--gray-600); display:block; margin-bottom:8px;">
+                Paste CSV data
+              </label>
+              <textarea
+                id="paste-input"
+                rows="8"
+                placeholder="Paste your CSV content here — include the header row&#10;&#10;id,name,email,department,title,salary,manager,hire_date&#10;EMP001,Alex Morgan,alex@company.com,Engineering,Sr. Software Engineer,145000,Jamie Rivera,2021-03-15"
+                style="width:100%; font-family:monospace; font-size:13px; padding:12px; border:1px solid var(--gray-200); border-radius:8px; resize:vertical; background:var(--gray-50); box-sizing:border-box;"
+              ></textarea>
+              <div style="margin-top:8px; text-align:right;">
+                <button class="btn btn-secondary btn-sm" onclick="handlePaste()">Parse Pasted CSV</button>
+              </div>
+            </div>
+
             <div class="mt-20">
               <div style="font-size:13px; font-weight:600; color:var(--gray-600); margin-bottom:8px;">
                 Expected CSV format
               </div>
-              <div class="code-sample">Employee Name,Department,Job Title,Base Salary,Manager,Email,Hire Date
-Alex Morgan,Engineering,Sr. Software Engineer,145000,Jamie Rivera,alex@company.com,2021-03-15
-Brianna Scott,Product,Product Manager,130000,Sam Chen,brianna@company.com,2020-07-01
-Carlos Vega,Sales,Account Executive,95000,Aisha Kofi,carlos@company.com,2022-01-10</div>
+              <div class="code-sample">id,name,email,department,title,salary,manager,hire_date,position_type,geography,level
+EMP001,Alex Morgan,alex@company.com,Engineering,Sr. Software Engineer,145000,Jamie Rivera,2021-03-15,Full-Time,US-West,L5
+EMP002,Brianna Scott,brianna@company.com,Product,Product Manager,"$130,000",Sam Chen,07/01/2020,Full-Time,US-East,L4
+EMP003,Carlos Vega,carlos@company.com,Sales,Account Executive,95000,Aisha Kofi,Jan 10 2022,,EMEA,</div>
             </div>
 
             <div class="mt-16" style="display:flex; gap:24px; flex-wrap:wrap;">
               <div>
                 <div style="font-size:12px; font-weight:700; color:var(--gray-600); margin-bottom:4px;">REQUIRED</div>
-                <div style="font-size:13px; color:var(--gray-700);">Name (or First + Last) &nbsp;·&nbsp; Current Salary</div>
+                <div style="font-size:13px; color:var(--gray-700);">Name (or First + Last) &nbsp;·&nbsp; Salary</div>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; color:var(--gray-400); margin-bottom:4px;">RECOMMENDED</div>
+                <div style="font-size:13px; color:var(--gray-500);">ID · Email · Department · Title · Manager · Hire Date</div>
               </div>
               <div>
                 <div style="font-size:12px; font-weight:700; color:var(--gray-400); margin-bottom:4px;">OPTIONAL</div>
-                <div style="font-size:13px; color:var(--gray-500);">Department · Job Title · Manager · Email · Employee ID · Hire Date · Performance Rating</div>
+                <div style="font-size:13px; color:var(--gray-500);">Position Type · Geography · Level · Performance Rating</div>
               </div>
             </div>
 
@@ -151,6 +179,7 @@ Carlos Vega,Sales,Account Executive,95000,Aisha Kofi,carlos@company.com,2022-01-
             <button class="btn btn-ghost btn-sm" onclick="goToStep(2)">← Edit Mapping</button>
           </div>
 
+          <div id="preview-errors" style="padding:0 20px; display:none;"></div>
           <div id="preview-warnings" style="padding:0 20px; display:none;"></div>
 
           <div style="overflow-x:auto;">
@@ -188,20 +217,24 @@ Carlos Vega,Sales,Account Executive,95000,Aisha Kofi,carlos@company.com,2022-01-
 let parsedCSV    = null;   // { headers, rows }
 let curMapping   = {};     // { fieldKey: 'CSV Column Header' }
 let importReady  = [];     // employee objects ready to import
+let lastErrors   = [];     // row-level validation errors
 
 // ── Field definitions ────────────────────────────────────────────
 const FIELD_DEFS = [
-  { key: 'fullName',   label: 'Full Name',          required: 'name',  hint: 'Or map First Name + Last Name separately below' },
-  { key: 'firstName',  label: 'First Name',         required: false,   hint: 'Alternative to Full Name' },
-  { key: 'lastName',   label: 'Last Name',          required: false,   hint: 'Alternative to Full Name' },
-  { key: 'salary',     label: 'Current Salary',     required: true,    hint: 'Accepts $145,000 or 145000' },
-  { key: 'department', label: 'Department',         required: false,   hint: '' },
-  { key: 'title',      label: 'Job Title',          required: false,   hint: '' },
-  { key: 'manager',    label: 'Manager',            required: false,   hint: '' },
-  { key: 'email',      label: 'Email',              required: false,   hint: '' },
-  { key: 'id',         label: 'Employee ID',        required: false,   hint: 'Used to match records on re-import' },
-  { key: 'hireDate',   label: 'Hire Date',         required: false,   hint: '' },
-  { key: 'rating',     label: 'Performance Rating', required: false,   hint: 'Carries over to recommendations' },
+  { key: 'fullName',     label: 'Full Name',          required: 'name',  hint: 'Or map First Name + Last Name separately below' },
+  { key: 'firstName',    label: 'First Name',         required: false,   hint: 'Alternative to Full Name' },
+  { key: 'lastName',     label: 'Last Name',          required: false,   hint: 'Alternative to Full Name' },
+  { key: 'salary',       label: 'Current Salary',     required: true,    hint: 'Accepts $145,000 or 145000' },
+  { key: 'email',        label: 'Email',              required: false,   hint: '' },
+  { key: 'department',   label: 'Department',         required: false,   hint: '' },
+  { key: 'title',        label: 'Job Title',          required: false,   hint: '' },
+  { key: 'manager',      label: 'Manager',            required: false,   hint: 'Name or email — blank is OK' },
+  { key: 'id',           label: 'Employee ID',        required: false,   hint: 'Auto-generated if not provided' },
+  { key: 'hireDate',     label: 'Hire Date',          required: false,   hint: 'ISO, US, or natural formats accepted' },
+  { key: 'positionType', label: 'Position Type',      required: false,   hint: 'e.g. Full-Time, Part-Time, Contractor' },
+  { key: 'geography',    label: 'Geography',          required: false,   hint: 'e.g. US-West, EMEA' },
+  { key: 'level',        label: 'Level',              required: false,   hint: 'e.g. L3, L4, Senior' },
+  { key: 'rating',       label: 'Performance Rating', required: false,   hint: 'Carries over to recommendations' },
 ];
 
 // ── File handling ────────────────────────────────────────────────
@@ -236,22 +269,44 @@ function handleFile(file) {
   }
   const reader = new FileReader();
   reader.onload = e => {
-    parsedCSV = CSV.parse(e.target.result);
-    if (!parsedCSV.headers.length) {
-      showToast('Could not read file — check that it is a valid CSV');
-      return;
-    }
-    curMapping = CSV.autoDetect(parsedCSV.headers);
-    buildMappingUI();
-    goToStep(2);
+    processCSVText(e.target.result, file.name);
+  };
+  reader.onerror = () => {
+    showToast('Failed to read file — please try again');
   };
   reader.readAsText(file);
 }
 
+function handlePaste() {
+  const text = document.getElementById('paste-input').value;
+  if (!text || !text.trim()) {
+    showToast('Please paste some CSV data first');
+    return;
+  }
+  processCSVText(text, 'pasted data');
+}
+
+function processCSVText(text, sourceName) {
+  parsedCSV = CSV.parse(text);
+  if (!parsedCSV.headers.length) {
+    showToast('Could not parse CSV — check that the data includes a header row and at least one data row');
+    return;
+  }
+  if (!parsedCSV.rows.length) {
+    showToast('CSV has headers but no data rows');
+    return;
+  }
+  curMapping = CSV.autoDetect(parsedCSV.headers);
+  buildMappingUI(sourceName);
+  goToStep(2);
+}
+
 // ── Step 2: Mapping UI ───────────────────────────────────────────
-function buildMappingUI() {
+function buildMappingUI(sourceName) {
+  const sourceLabel = sourceName || '';
   document.getElementById('file-info').textContent =
-    `${parsedCSV.headers.length} columns · ${parsedCSV.rows.length} data rows detected`;
+    `${parsedCSV.headers.length} columns · ${parsedCSV.rows.length} data rows detected` +
+    (sourceLabel ? ` · from ${sourceLabel}` : '');
 
   const firstRow = parsedCSV.rows[0] || {};
   const container = document.getElementById('mapping-fields');
@@ -267,10 +322,9 @@ function buildMappingUI() {
 
     const opts = ['<option value="">— Not mapped —</option>',
       ...parsedCSV.headers.map(h =>
-        `<option value="${h}" ${curMapping[field.key] === h ? 'selected' : ''}>${h}</option>`)
+        `<option value="${escapeHtml(h)}" ${curMapping[field.key] === h ? 'selected' : ''}>${escapeHtml(h)}</option>`)
     ].join('');
 
-    // Show a sample value from the first row if this column is already mapped
     const sampleVal = curMapping[field.key] ? firstRow[curMapping[field.key]] || '' : '';
 
     row.innerHTML = `
@@ -283,17 +337,22 @@ function buildMappingUI() {
         <select data-field="${field.key}" onchange="onMappingChange(this)">
           ${opts}
         </select>
-        <div class="mapping-sample" id="sample-${field.key}">${sampleVal ? `e.g. "${sampleVal}"` : ''}</div>
+        <div class="mapping-sample" id="sample-${field.key}">${sampleVal ? `e.g. "${escapeHtml(sampleVal)}"` : ''}</div>
       </div>
     `;
     container.appendChild(row);
   });
 }
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 function onMappingChange(select) {
   const field = select.dataset.field;
   curMapping[field] = select.value || undefined;
-  // Update sample preview
   const firstRow   = parsedCSV.rows[0] || {};
   const sampleEl   = document.getElementById(`sample-${field}`);
   sampleEl.textContent = select.value ? `e.g. "${firstRow[select.value] || ''}"` : '';
@@ -315,10 +374,29 @@ function validateMapping() {
 function buildPreview() {
   if (!validateMapping()) return;
 
-  const { employees, warnings } = CSV.toEmployees(parsedCSV.rows, curMapping);
+  const { employees, warnings, errors } = CSV.toEmployees(parsedCSV.rows, curMapping);
   importReady = employees;
+  lastErrors = errors;
 
-  // Warnings
+  // Show row-level errors
+  const errEl = document.getElementById('preview-errors');
+  if (errors.length) {
+    errEl.style.display = 'block';
+    errEl.innerHTML = `
+      <div class="alert alert-red" style="margin:16px 20px 0;">
+        <div class="alert-icon">✕</div>
+        <div>
+          <strong>${errors.length} row${errors.length !== 1 ? 's' : ''} will be skipped due to errors:</strong>
+          <ul style="margin-top:6px; padding-left:16px; display:flex; flex-direction:column; gap:2px;">
+            ${errors.map(e => `<li style="font-size:13px;">Row ${e.row} (${escapeHtml(e.name)}): ${escapeHtml(e.errors.join('; '))}</li>`).join('')}
+          </ul>
+        </div>
+      </div>`;
+  } else {
+    errEl.style.display = 'none';
+  }
+
+  // Show warnings
   const warnEl = document.getElementById('preview-warnings');
   if (warnings.length) {
     warnEl.style.display = 'block';
@@ -326,9 +404,9 @@ function buildPreview() {
       <div class="alert alert-amber" style="margin:16px 20px 0;">
         <div class="alert-icon">⚠</div>
         <div>
-          <strong>${warnings.length} warning${warnings.length !== 1 ? 's' : ''}:</strong>
+          <strong>${warnings.length} warning${warnings.length !== 1 ? 's' : ''} (auto-corrected):</strong>
           <ul style="margin-top:6px; padding-left:16px; display:flex; flex-direction:column; gap:2px;">
-            ${warnings.map(w => `<li style="font-size:13px;">${w}</li>`).join('')}
+            ${warnings.map(w => `<li style="font-size:13px;">${escapeHtml(w)}</li>`).join('')}
           </ul>
         </div>
       </div>`;
@@ -337,19 +415,22 @@ function buildPreview() {
   }
 
   // Headline
-  document.getElementById('preview-title').textContent    = `Preview — ${employees.length} employees`;
-  document.getElementById('preview-subtitle').textContent = `Showing first 10 rows`;
-  document.getElementById('import-btn').textContent       = `Import ${employees.length} Employees →`;
-  document.getElementById('import-btn').disabled = false;
-  document.getElementById('import-btn').className = 'btn btn-primary';
+  const total = parsedCSV.rows.length;
+  document.getElementById('preview-title').textContent = `Preview — ${employees.length} of ${total} rows ready`;
+  document.getElementById('preview-subtitle').textContent =
+    employees.length > 10 ? `Showing first 10 rows` : `Showing all ${employees.length} rows`;
+  document.getElementById('import-btn').textContent = `Import ${employees.length} Employees →`;
+  document.getElementById('import-btn').disabled = employees.length === 0;
+  document.getElementById('import-btn').className = employees.length ? 'btn btn-primary' : 'btn btn-secondary';
 
-  // Determine which columns to show (only those we actually mapped)
-  const cols = ['name','department','title','salary','manager','email','hireDate']
+  // Determine which columns to show
+  const cols = ['name','email','department','title','salary','manager','hireDate','positionType','geography','level']
     .filter(c => employees.some(e => e[c]));
 
   const LABELS = {
-    name:'Name', department:'Department', title:'Job Title',
-    salary:'Salary', manager:'Manager', email:'Email', hireDate:'Hire Date',
+    name:'Name', email:'Email', department:'Department', title:'Job Title',
+    salary:'Salary', manager:'Manager', hireDate:'Hire Date',
+    positionType:'Position Type', geography:'Geography', level:'Level',
   };
 
   // Header
@@ -361,7 +442,7 @@ function buildPreview() {
   document.getElementById('preview-tbody').innerHTML = [
     ...preview.map(e => `<tr>${cols.map(c => {
       if (c === 'salary') return `<td class="numeric">$${(e.salary || 0).toLocaleString()}</td>`;
-      return `<td>${e[c] || '<span style="color:var(--gray-300)">—</span>'}</td>`;
+      return `<td>${escapeHtml(e[c]) || '<span style="color:var(--gray-300)">—</span>'}</td>`;
     }).join('')}</tr>`),
     employees.length > 10
       ? `<tr><td colspan="${cols.length}" style="text-align:center; color:var(--gray-400); font-style:italic; padding:14px;">
@@ -378,13 +459,12 @@ function doImport() {
   if (!importReady.length) return;
 
   if (document.getElementById('clear-recs-cb').checked) {
-    Store.clearEmployees(); // clears both employees + recommendations
+    Store.clearEmployees();
   }
 
-  // If NOT clearing, merge: keep existing employees not in new import
   if (!document.getElementById('clear-recs-cb').checked) {
-    const existing    = Store.getEmployees();
-    const newIds      = new Set(importReady.map(e => e.id));
+    const existing     = Store.getEmployees();
+    const newIds       = new Set(importReady.map(e => e.id));
     const keepExisting = existing.filter(e => !newIds.has(e.id));
     Store.setEmployees([...keepExisting, ...importReady]);
   } else {
@@ -408,7 +488,13 @@ function doImport() {
   btn.disabled    = true;
   btn.className   = 'btn btn-success';
 
-  showToast(`Imported ${importReady.length} employees`);
+  const skipped = lastErrors.length;
+  const msg = skipped
+    ? `Imported ${importReady.length} employees (${skipped} row${skipped !== 1 ? 's' : ''} skipped)`
+    : `Imported ${importReady.length} employees`;
+  showToast(msg);
+  console.log('[MeritCycle Import]', msg, { imported: importReady.length, skipped, errors: lastErrors });
+
   setTimeout(() => { window.location.href = 'merit.html'; }, 1400);
 }
 
@@ -434,7 +520,6 @@ function showToast(msg) {
 (function init() {
   RoleUI.init();
 
-  // Show existing employee count warning if data already exists
   const count = Store.getEmployees().length;
   if (count > 0) {
     document.getElementById('existing-badge').style.display = 'flex';
