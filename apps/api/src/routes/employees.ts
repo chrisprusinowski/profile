@@ -152,7 +152,9 @@ async function fetchEmployeesFromDb(
               manager_email AS "managerEmail",
               to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
        FROM employees
-       WHERE lower(manager) = lower($1) OR lower(manager_email) = lower($2)
+       WHERE lower(manager) = lower($1)
+          OR lower(manager_email) = lower($2)
+          OR lower(manager) = lower($2)
        ORDER BY name ASC, id ASC`,
       [managerScopeName, managerScopeEmail],
     )

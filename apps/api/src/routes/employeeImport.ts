@@ -107,6 +107,10 @@ export function normalizeEmail(value: string | undefined): string {
   return normalizeText(value).toLowerCase();
 }
 
+function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export function parseSalary(value: string | undefined): number | null {
   const raw = normalizeText(value);
   if (!raw) return null;
@@ -239,8 +243,11 @@ export function prepareEmployeeImport(csvContent: string): ImportPreparation {
     const email = normalizeEmail(read('email'));
     const department = normalizeText(read('department'));
     const title = normalizeText(read('title'));
-    const manager = normalizeText(read('manager'));
-    const managerEmail = normalizeEmail(read('manager_email'));
+    const rawManager = normalizeText(read('manager'));
+    const rawManagerEmail = normalizeEmail(read('manager_email'));
+    const managerLooksLikeEmail = !rawManagerEmail && looksLikeEmail(rawManager);
+    const manager = managerLooksLikeEmail ? '' : rawManager;
+    const managerEmail = managerLooksLikeEmail ? normalizeEmail(rawManager) : rawManagerEmail;
     const positionType = normalizeText(read('position_type'));
     const geography = normalizeText(read('geography'));
     const level = normalizeText(read('level'));
@@ -275,6 +282,13 @@ export function prepareEmployeeImport(csvContent: string): ImportPreparation {
     for (const field of RECOMMENDED_FIELDS) {
       const value = field === 'email' ? email : field === 'department' ? department : title;
       if (!value) warnings.push({ row: rowNumber, message: `Recommended field missing: ${field}` });
+    }
+
+    if (managerLooksLikeEmail) {
+      warnings.push({
+        row: rowNumber,
+        message: 'manager looked like an email; normalized to manager_email for manager-scope visibility'
+      });
     }
 
     if (rowErrors.length > 0) {
