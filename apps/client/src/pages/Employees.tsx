@@ -4,9 +4,11 @@ import { fmt, fmtDate, initials, avatarColor } from '../utils.js';
 import {
   createEmployee,
   deleteEmployee,
-  importEmployeesCsv,
+  commitEmployeesCsvImport,
+  previewEmployeesCsvImport,
   updateEmployee,
-  type CsvImportSummary,
+  type CsvImportPreview,
+  type CsvImportResult,
 } from '../api/client.js';
 
 interface Props {
@@ -89,7 +91,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
   const [importText, setImportText] = useState('');
   const [importFileName, setImportFileName] = useState('');
   const [importing, setImporting] = useState(false);
-  const [importSummary, setImportSummary] = useState<CsvImportSummary | null>(null);
+  const [importPreview, setImportPreview] = useState<CsvImportPreview | null>(null);
+  const [importSummary, setImportSummary] = useState<CsvImportResult | null>(null);
 
   useEffect(() => {
     setRows(employees);
@@ -224,15 +227,22 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     setImporting(true);
     setImportSummary(null);
     try {
-      const summary = await importEmployeesCsv({ csvContent });
-      setImportSummary(summary);
+      const preview = await previewEmployeesCsvImport({ csvContent });
+      setImportPreview(preview);
 
-      const persisted = summary.rowsInserted + summary.rowsUpdated;
-      if (persisted === 0) {
-        showToast(`CSV import warning: no rows persisted (${summary.rowsRejected} rejected)`);
+      if (preview.rowsInvalid > 0) {
+        showToast(`CSV validation failed: ${preview.rowsInvalid} invalid row(s)`);
         return;
       }
 
+      const confirmed = window.confirm(`Import ${preview.rowsValid} validated row(s) into the employee table?`);
+      if (!confirmed) {
+        showToast('Import canceled');
+        return;
+      }
+
+      const summary = await commitEmployeesCsvImport({ csvContent });
+      setImportSummary(summary);
       showToast(`CSV import complete: ${summary.rowsInserted} inserted, ${summary.rowsUpdated} updated`);
       await refreshAll();
     } catch (err) {
@@ -328,14 +338,19 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
             </div>
             <textarea className="form-input" rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="id,name,email,department,title,position_type,geography,level,salary,manager,hire_date" />
             <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={handleImportFromPaste} disabled={importing}>{importing ? 'Importing…' : 'Import CSV to PostgreSQL'}</button></div>
-            {importSummary && (
+            {importPreview && (
               <div style={{ marginTop: 10, fontSize: 13 }}>
-                <div>Received {importSummary.rowsReceived} • Valid {importSummary.rowsValid} • Inserted {importSummary.rowsInserted} • Updated {importSummary.rowsUpdated} • Rejected {importSummary.rowsRejected}</div>
-                {importSummary.validationErrors.length > 0 && (
+                <div>Preview: Received {importPreview.rowsReceived} • Valid {importPreview.rowsValid} • Invalid {importPreview.rowsInvalid}</div>
+                {importPreview.errors.length > 0 && (
                   <div style={{ marginTop: 6, color: 'var(--red-600)' }}>
-                    First errors: {importSummary.validationErrors.slice(0, 3).map((e) => `row ${e.row}: ${e.error}`).join(' | ')}
+                    Errors: {importPreview.errors.slice(0, 3).map((e) => `row ${e.row}: ${e.message}`).join(' | ')}
                   </div>
                 )}
+              </div>
+            )}
+            {importSummary && (
+              <div style={{ marginTop: 10, fontSize: 13 }}>
+                <div>Committed: Received {importSummary.rowsReceived} • Inserted {importSummary.rowsInserted} • Updated {importSummary.rowsUpdated} • Rejected {importSummary.rowsRejected}</div>
               </div>
             )}
           </div>

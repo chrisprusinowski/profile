@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { readFile } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import {
   getEffectiveManagerScope,
@@ -10,7 +11,7 @@ import { pool } from '../db.js';
 import { findBestPayRange, type PayRangeRecord } from '../payRanges.js';
 import { logAuditEvent } from '../audit.js';
 import { recalculateRecommendationAmountsForEmployee } from '../recommendationCalculations.js';
-import { validateAndNormalizeRows } from './employeeImport.js';
+import { prepareEmployeeImport } from './employeeImport.js';
 
 export const employeesRouter = Router();
 
@@ -329,8 +330,10 @@ employeesRouter.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
 employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next) => {
   if (!requireRole(req, res, ['admin'])) return;
   try {
+    const action = req.body?.action === 'commit' ? 'commit' : 'preview';
     console.info('[employees.import] Route hit', {
-      actorEmail: req.user?.email
+      actorEmail: req.user?.email,
+      action
     });
 
     let csvContent = '';
@@ -343,56 +346,65 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       return;
     }
 
-    const normalized = validateAndNormalizeRows(csvContent);
-    const rowsReceived = normalized.rowsProcessed;
-    const rowsValid = normalized.rows.length;
-    const rowsRejected = normalized.errors.length;
+    const prepared = prepareEmployeeImport(csvContent);
+    const { rowsReceived, rowsValid, rowsInvalid, errors, warnings } = prepared.preview;
+
+    console.info('[employees.import] Parsed and validated CSV', {
+      actorEmail: req.user?.email,
+      rowsReceived,
+      rowsValid,
+      rowsRejected: rowsInvalid
+    });
+
+    if (action === 'preview') {
+      res.json({
+        success: true,
+        data: {
+          rowsReceived,
+          rowsValid,
+          rowsInvalid,
+          errors,
+          warnings
+        }
+      });
+      return;
+    }
 
     if (rowsReceived === 0) {
       res.status(400).json({
         success: false,
-        error: 'CSV must include header and at least one data row',
-        data: {
-          rowsReceived: 0,
-          rowsValid: 0,
-          rowsInserted: 0,
-          rowsUpdated: 0,
-          rowsRejected: 0,
-          rowsProcessed: 0,
-          inserted: 0,
-          updated: 0,
-          rejected: 0,
-          validationErrors: normalized.errors
-        }
-      });
-      return;
-    }
-
-    if (rowsRejected > 0) {
-      res.status(400).json({
-        success: false,
-        error: 'CSV validation failed',
+        error: 'CSV must include at least one data row',
         data: {
           rowsReceived,
-          rowsValid,
           rowsInserted: 0,
           rowsUpdated: 0,
-          rowsRejected,
-          rowsProcessed: rowsReceived,
-          inserted: 0,
-          updated: 0,
-          rejected: rowsRejected,
-          validationErrors: normalized.errors
+          rowsRejected: rowsInvalid
         }
       });
       return;
     }
 
-    console.info('[employees.import] Starting CSV import transaction', {
+    if (rowsInvalid > 0 || errors.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: 'CSV validation failed. Fix errors and retry commit.',
+        data: {
+          rowsReceived,
+          rowsInserted: 0,
+          rowsUpdated: 0,
+          rowsRejected: rowsInvalid,
+          errors,
+          warnings
+        }
+      });
+      return;
+    }
+
+    console.info('[employees.import] Starting import transaction', {
       actorEmail: req.user?.email,
       rowsReceived,
       rowsValid,
-      rowsRejected,
+      rowsRejected: rowsInvalid,
       dbTarget: await loadDbTargetInfo()
     });
 
@@ -402,9 +414,9 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      for (const row of normalized.rows) {
+      for (const row of prepared.validRows) {
         const validation = employeeSchema.safeParse({
-          id: row.id,
+          id: row.id || randomUUID(),
           name: row.name,
           email: row.email,
           department: row.department,
@@ -470,7 +482,7 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
         rowsValid,
         rowsInserted: inserted,
         rowsUpdated: updated,
-        rowsRejected: 0
+        rowsRejected: rowsInvalid
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -487,27 +499,6 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       client.release();
     }
 
-    const persistedRows = inserted + updated;
-    if (persistedRows === 0) {
-      res.status(409).json({
-        success: false,
-        error: 'No employee rows were persisted',
-        data: {
-          rowsReceived,
-          rowsValid,
-          rowsInserted: inserted,
-          rowsUpdated: updated,
-          rowsRejected: rowsReceived - rowsValid,
-          rowsProcessed: rowsReceived,
-          inserted,
-          updated,
-          rejected: rowsReceived - rowsValid,
-          validationErrors: []
-        }
-      });
-      return;
-    }
-
     await logAuditEvent({
       actionType: 'employee.imported',
       actorEmail: req.user!.email,
@@ -518,8 +509,8 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
         rowsValid,
         rowsInserted: inserted,
         rowsUpdated: updated,
-        rowsRejected: 0,
-        unknownColumns: normalized.unknownColumns
+        rowsRejected: rowsInvalid,
+        unknownColumns: prepared.unknownColumns
       }
     });
 
@@ -527,15 +518,9 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
       success: true,
       data: {
         rowsReceived,
-        rowsValid,
         rowsInserted: inserted,
         rowsUpdated: updated,
-        rowsRejected: 0,
-        rowsProcessed: rowsReceived,
-        inserted,
-        updated,
-        rejected: 0,
-        validationErrors: []
+        rowsRejected: rowsInvalid
       }
     });
   } catch (error) {
