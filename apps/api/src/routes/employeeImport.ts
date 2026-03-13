@@ -9,6 +9,7 @@ export const CANONICAL_COLUMNS = [
   'manager_id',
   'manager_email',
   'executive_name',
+  'executive_email',
   'job_title',
   'job_family_group',
   'job_family',
@@ -42,6 +43,7 @@ const HEADER_ALIASES: Record<string, CanonicalEmployeeImportColumn> = {
   managerid: 'manager_id',
   manageremail: 'manager_email', manager_email: 'manager_email', managermail: 'manager_email',
   execname: 'executive_name', executivename: 'executive_name',
+  execemail: 'executive_email', executiveemail: 'executive_email',
   title: 'job_title', jobtitle: 'job_title', role: 'job_title', jobname: 'job_title',
   jobfamilygroup: 'job_family_group', jobfamily: 'job_family',
   level: 'level', grade: 'level', band: 'level', joblevel: 'level',
@@ -274,6 +276,7 @@ export function prepareEmployeeImport(csvContent: string): ImportPreparation {
 
       switch (mapped) {
         case 'manager_email':
+        case 'executive_email':
           normalized[mapped] = normalizeEmail(value) || null;
           break;
         case 'current_salary':

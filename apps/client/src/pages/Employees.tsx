@@ -31,7 +31,7 @@ interface EmployeeFormState {
   level: string;
   salary: string;
   manager: string;
-  managerEmail: string;
+  executiveEmail: string;
   hireDate: string;
 }
 
@@ -46,7 +46,7 @@ const EMPTY_FORM: EmployeeFormState = {
   level: '',
   salary: '0',
   manager: '',
-  managerEmail: '',
+  executiveEmail: '',
   hireDate: '',
 };
 
@@ -62,7 +62,7 @@ function employeeToForm(employee: Employee): EmployeeFormState {
     level: employee.level ?? '',
     salary: String(employee.salary ?? 0),
     manager: employee.manager ?? '',
-    managerEmail: employee.managerEmail ?? '',
+    executiveEmail: employee.executiveEmail ?? '',
     hireDate: employee.hireDate ?? '',
   };
 }
@@ -128,8 +128,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
     const trimmedId = form.id.trim();
     const trimmedName = form.name.trim();
     const trimmedEmail = form.email.trim();
-    const trimmedManager = form.manager.trim();
-    const trimmedManagerEmail = form.managerEmail.trim().toLowerCase();
+    const trimmedExecutive = form.manager.trim();
+    const trimmedExecutiveEmail = form.executiveEmail.trim().toLowerCase();
     setFormError(null);
 
     if (!trimmedId && !editingId) {
@@ -144,8 +144,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
       setFormError('Email must be in a valid format (example: name@company.com).');
       return;
     }
-    if (trimmedManagerEmail && !/^\S+@\S+\.\S+$/.test(trimmedManagerEmail)) {
-      setFormError('Manager email must be in a valid format (example: manager@company.com).');
+    if (trimmedExecutiveEmail && !/^\S+@\S+\.\S+$/.test(trimmedExecutiveEmail)) {
+      setFormError('Executive email must be in a valid format (example: executive@company.com).');
       return;
     }
     if (Number.isNaN(parsedSalary) || parsedSalary < 0 || !Number.isFinite(parsedSalary)) {
@@ -169,8 +169,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           geography: form.geography || undefined,
           level: form.level || undefined,
           salary: parsedSalary,
-          manager: trimmedManager || undefined,
-          managerEmail: trimmedManagerEmail || undefined,
+          executiveName: trimmedExecutive || undefined,
+          executiveEmail: trimmedExecutiveEmail || undefined,
           hireDate: form.hireDate || undefined,
         });
         setRows((current) => current.map((row) => (row.id === updated.id ? updated : row)));
@@ -186,8 +186,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
           geography: form.geography || undefined,
           level: form.level || undefined,
           salary: parsedSalary,
-          manager: trimmedManager || undefined,
-          managerEmail: trimmedManagerEmail || undefined,
+          executiveName: trimmedExecutive || undefined,
+          executiveEmail: trimmedExecutiveEmail || undefined,
           hireDate: form.hireDate || undefined,
         });
         setRows((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
@@ -309,8 +309,8 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                 <div className="form-group"><label className="form-label">Level</label><input className="form-input" value={form.level} onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))} /></div>
               </div>
               <div className="form-row">
-                <div className="form-group"><label className="form-label">Manager</label><input className="form-input" value={form.manager} onChange={(e) => setForm((f) => ({ ...f, manager: e.target.value }))} /></div>
-                <div className="form-group"><label className="form-label">Manager Email</label><input className="form-input" type="email" value={form.managerEmail} onChange={(e) => setForm((f) => ({ ...f, managerEmail: e.target.value }))} /></div>
+                <div className="form-group"><label className="form-label">Executive</label><input className="form-input" value={form.manager} onChange={(e) => setForm((f) => ({ ...f, manager: e.target.value }))} /></div>
+                <div className="form-group"><label className="form-label">Executive Email</label><input className="form-input" type="email" value={form.executiveEmail} onChange={(e) => setForm((f) => ({ ...f, executiveEmail: e.target.value }))} /></div>
               </div>
               <div className="form-row">
                 <div className="form-group"><label className="form-label">Salary</label><input className="form-input" type="number" min="0" step="0.01" value={form.salary} onChange={(e) => setForm((f) => ({ ...f, salary: e.target.value }))} /></div>
@@ -328,7 +328,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
         {!readOnly && <div className="card mb-20">
           <div className="card-header"><div className="card-title">Import Employees from CSV</div></div>
           <div className="card-body">
-            <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>Paste CSV or upload a .csv file (required columns: id, name, email, department, title, salary, manager, hire_date). Optional: position_type, geography, level.</p>
+            <p style={{ marginTop: 0, color: 'var(--gray-500)' }}>Paste CSV or upload a .csv file (required columns: id, name, email, department, title, salary, executive_email, hire_date). Optional: position_type, geography, level.</p>
             <div style={{ marginBottom: 10 }}>
               <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
                 Upload CSV
@@ -336,7 +336,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
               </label>
               {importFileName && <span style={{ marginLeft: 8, color: 'var(--gray-500)' }}>{importFileName}</span>}
             </div>
-            <textarea className="form-input" rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="id,name,email,department,title,position_type,geography,level,salary,manager,hire_date" />
+            <textarea className="form-input" rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="id,name,email,department,title,position_type,geography,level,salary,executive_email,hire_date" />
             <div style={{ marginTop: 10 }}><button className="btn btn-secondary" onClick={handleImportFromPaste} disabled={importing}>{importing ? 'Importing…' : 'Import CSV to PostgreSQL'}</button></div>
             {importPreview && (
               <div style={{ marginTop: 10, fontSize: 13 }}>
@@ -371,7 +371,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
             <div className="toolbar">
               <div className="search-box">
                 <span className="search-icon">🔍</span>
-                <input type="search" placeholder="Search by name, manager, title, or department" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <input type="search" placeholder="Search by name, executive, title, or department" value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <select className="filter-select" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
                 <option value="">All departments</option>
@@ -383,7 +383,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Name</th><th>Department</th><th>Title</th><th>Position/Geo</th><th className="numeric">Salary</th><th>Manager</th><th>Hire Date</th>{!readOnly && <th>Actions</th>}
+                    <th>Name</th><th>Department</th><th>Title</th><th>Position/Geo</th><th className="numeric">Salary</th><th>Executive</th><th>Hire Date</th>{!readOnly && <th>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -402,7 +402,7 @@ export function Employees({ employees, showToast, refreshAll, readOnly = false }
                       <td>{e.title ?? '—'}</td>
                       <td>{e.positionType ?? '—'} / {e.geography ?? '—'}</td>
                       <td className="numeric">{fmt(e.salary)}</td>
-                      <td>{e.manager ?? '—'}{e.managerEmail ? <div className="employee-title">{e.managerEmail}</div> : null}</td>
+                      <td>{e.executiveName ?? '—'}{e.executiveEmail ? <div className="employee-title">{e.executiveEmail}</div> : null}</td>
                       <td>{fmtDate(e.hireDate)}</td>
                       {!readOnly && <td>
                         <div style={{ display: 'flex', gap: 8 }}>

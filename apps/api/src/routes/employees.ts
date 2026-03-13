@@ -3,7 +3,7 @@ import { readFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import {
-  getEffectiveManagerScope,
+  getEffectiveExecutiveScope,
   requireRole,
   type AuthenticatedRequest
 } from '../auth.js';
@@ -27,6 +27,8 @@ const employeeSchema = z.object({
   salary: z.coerce.number().finite().min(0, 'salary must be >= 0'),
   manager: z.string().trim().max(255).optional().or(z.literal('')),
   managerEmail: z.string().trim().email().optional().or(z.literal('')),
+  executiveName: z.string().trim().max(255).optional().or(z.literal('')),
+  executiveEmail: z.string().trim().email().optional().or(z.literal('')),
   hireDate: z.string().trim().optional().or(z.literal('')),
 });
 
@@ -132,13 +134,10 @@ async function loadDbTargetInfo() {
   };
 }
 
-async function fetchEmployeesFromDb(
-  managerScopeName: string | null,
-  managerScopeEmail: string | null
-) {
-  const shouldScope = Boolean(managerScopeName || managerScopeEmail);
-  const result = shouldScope
-    ? await pool.query(
+async function fetchEmployeesFromDb(userRole: string | undefined, executiveScopeEmail: string | null) {
+  let result: { rows: any[] };
+  if (userRole === 'admin') {
+    result = await pool.query(
       `SELECT id,
               name,
               email,
@@ -150,30 +149,36 @@ async function fetchEmployeesFromDb(
               salary::float AS salary,
               manager,
               manager_email AS "managerEmail",
-              to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
-       FROM employees
-       WHERE lower(manager) = lower($1)
-          OR lower(manager_email) = lower($2)
-          OR lower(manager) = lower($2)
-       ORDER BY name ASC, id ASC`,
-      [managerScopeName, managerScopeEmail],
-    )
-    : await pool.query(
-      `SELECT id,
-              name,
-              email,
-              department,
-              title,
-              position_type AS "positionType",
-              geography,
-              level,
-              salary::float AS salary,
-              manager,
-              manager_email AS "managerEmail",
+              executive_name AS "executiveName",
+              executive_email AS "executiveEmail",
               to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
        FROM employees
        ORDER BY name ASC, id ASC`,
     );
+  } else if (userRole === 'executive' && executiveScopeEmail) {
+    result = await pool.query(
+      `SELECT id,
+              name,
+              email,
+              department,
+              title,
+              position_type AS "positionType",
+              geography,
+              level,
+              salary::float AS salary,
+              manager,
+              manager_email AS "managerEmail",
+              executive_name AS "executiveName",
+              executive_email AS "executiveEmail",
+              to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"
+       FROM employees
+       WHERE lower(executive_email) = lower($1)
+       ORDER BY name ASC, id ASC`,
+      [executiveScopeEmail],
+    );
+  } else {
+    result = { rows: [] };
+  }
 
   const ranges = await loadPayRanges();
   return result.rows.map((employee) => ({
@@ -190,9 +195,8 @@ employeesRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
       dbTarget
     });
 
-    const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
-      getEffectiveManagerScope(req.user!);
-    const employees = await fetchEmployeesFromDb(managerScopeName, managerScopeEmail);
+    const { executiveEmail } = getEffectiveExecutiveScope(req.user!);
+    const employees = await fetchEmployeesFromDb(req.user?.role, executiveEmail);
 
     console.info('[employees.roster] Query completed', {
       actorEmail: req.user?.email,
@@ -223,8 +227,8 @@ employeesRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, hire_date)
-       VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), $12)
+      `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, executive_name, executive_email, hire_date)
+       VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), NULLIF($12, ''), NULLIF(lower($13), ''), $14)
        RETURNING id,
                  name,
                  email,
@@ -236,8 +240,10 @@ employeesRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
                  salary::float AS salary,
                  manager,
                  manager_email AS "managerEmail",
+                 executive_name AS "executiveName",
+                 executive_email AS "executiveEmail",
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
-      [employee.id, employee.name, employee.email ?? '', employee.department ?? '', employee.title ?? '', employee.positionType ?? '', employee.geography ?? '', employee.level ?? '', employee.salary, employee.manager ?? '', employee.managerEmail ?? '', hireDate],
+      [employee.id, employee.name, employee.email ?? '', employee.department ?? '', employee.title ?? '', employee.positionType ?? '', employee.geography ?? '', employee.level ?? '', employee.salary, employee.manager ?? '', employee.managerEmail ?? '', employee.executiveName ?? '', employee.executiveEmail ?? '', hireDate],
     );
 
     await recalculateRecommendationAmountsForEmployee(result.rows[0].id);
@@ -280,9 +286,11 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
            salary = $8,
            manager = NULLIF($9, ''),
            manager_email = NULLIF(lower($10), ''),
-           hire_date = $11,
+           executive_name = NULLIF($11, ''),
+           executive_email = NULLIF(lower($12), ''),
+           hire_date = $13,
            updated_at = NOW()
-       WHERE id = $12
+       WHERE id = $14
        RETURNING id,
                  name,
                  email,
@@ -294,8 +302,10 @@ employeesRouter.put('/:id', async (req: AuthenticatedRequest, res, next) => {
                  salary::float AS salary,
                  manager,
                  manager_email AS "managerEmail",
+                 executive_name AS "executiveName",
+                 executive_email AS "executiveEmail",
                  to_char(hire_date, 'YYYY-MM-DD') AS "hireDate"`,
-      [parsed.data.name, parsed.data.email ?? '', parsed.data.department ?? '', parsed.data.title ?? '', parsed.data.positionType ?? '', parsed.data.geography ?? '', parsed.data.level ?? '', parsed.data.salary, parsed.data.manager ?? '', parsed.data.managerEmail ?? '', hireDate, req.params.id],
+      [parsed.data.name, parsed.data.email ?? '', parsed.data.department ?? '', parsed.data.title ?? '', parsed.data.positionType ?? '', parsed.data.geography ?? '', parsed.data.level ?? '', parsed.data.salary, parsed.data.manager ?? '', parsed.data.managerEmail ?? '', parsed.data.executiveName ?? '', parsed.data.executiveEmail ?? '', hireDate, req.params.id],
     );
 
     if (result.rowCount === 0) {
@@ -446,8 +456,8 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
         );
 
         const upsertResult = await client.query(
-          `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, hire_date, first_name, last_name, full_name, job_family_group, job_family, business_entity, employment_classification, flsa_status, hourly_rate, range_low, range_mid, range_high, compa_ratio, bonus_target_percent, total_cash, total_comp, raw_attributes, import_batch_id)
-           VALUES ($1, NULLIF($2, ''), NULLIF(lower($3), ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), NULLIF($12, '')::date, NULLIF($13, ''), NULLIF($14, ''), NULLIF($15, ''), NULLIF($16, ''), NULLIF($17, ''), NULLIF($18, ''), NULLIF($19, ''), NULLIF($20, ''), $21, $22, $23, $24, $25, $26, $27, $28, $29::jsonb, $30)
+          `INSERT INTO employees (id, name, email, department, title, position_type, geography, level, salary, manager, manager_email, executive_name, executive_email, hire_date, first_name, last_name, full_name, job_family_group, job_family, business_entity, employment_classification, flsa_status, hourly_rate, range_low, range_mid, range_high, compa_ratio, bonus_target_percent, total_cash, total_comp, raw_attributes, import_batch_id)
+           VALUES ($1, NULLIF($2, ''), NULLIF(lower($3), ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF(lower($11), ''), NULLIF($12, ''), NULLIF(lower($13), ''), NULLIF($14, '')::date, NULLIF($15, ''), NULLIF($16, ''), NULLIF($17, ''), NULLIF($18, ''), NULLIF($19, ''), NULLIF($20, ''), NULLIF($21, ''), NULLIF($22, ''), $23, $24, $25, $26, $27, $28, $29, $30, $31::jsonb, $32)
            ON CONFLICT (id)
            DO UPDATE SET name = COALESCE(EXCLUDED.name, employees.name),
                          email = EXCLUDED.email,
@@ -459,6 +469,8 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
                          salary = COALESCE(EXCLUDED.salary, employees.salary),
                          manager = EXCLUDED.manager,
                          manager_email = EXCLUDED.manager_email,
+                         executive_name = EXCLUDED.executive_name,
+                         executive_email = EXCLUDED.executive_email,
                          hire_date = EXCLUDED.hire_date,
                          first_name = EXCLUDED.first_name,
                          last_name = EXCLUDED.last_name,
@@ -492,6 +504,8 @@ employeesRouter.post('/import-csv', async (req: AuthenticatedRequest, res, next)
             currentSalary,
             valuesByCanonical.manager_name ?? '',
             valuesByCanonical.manager_email ?? '',
+            valuesByCanonical.executive_name ?? '',
+            valuesByCanonical.executive_email ?? '',
             valuesByCanonical.hire_date ?? valuesByCanonical.start_date ?? '',
             firstName,
             lastName,

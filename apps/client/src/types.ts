@@ -23,6 +23,8 @@ export interface Employee {
   salary: number;
   manager?: string;
   managerEmail?: string;
+  executiveName?: string;
+  executiveEmail?: string;
   hireDate?: string;
   payRange?: EmployeePayRange;
 }
@@ -93,8 +95,8 @@ export type AppRole = 'admin' | 'executive' | 'manager';
 export interface AppUser {
   email: string;
   role: AppRole;
-  managerName?: string | null;
-  managerEmail?: string | null;
+  executiveName?: string | null;
+  executiveEmail?: string | null;
   isActive: boolean;
 }
 

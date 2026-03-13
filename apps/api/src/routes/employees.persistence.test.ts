@@ -26,7 +26,7 @@ function makeApp() {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as any).user = { email: 'admin@demo.com', role: 'admin', managerName: null, managerEmail: null, isActive: true };
+    (req as any).user = { email: 'admin@demo.com', role: 'admin', executiveName: null, executiveEmail: null, isActive: true };
     next();
   });
   return import('./employees.js').then(({ employeesRouter }) => {
@@ -140,7 +140,7 @@ describe('employees persistence path', () => {
             level: params?.[7],
             salary: Number(params?.[8] ?? 0),
             manager: params?.[9],
-            managerEmail: params?.[10],
+            executiveEmail: params?.[10],
             hireDate: String(params?.[11] ?? '')
           });
           return { rows: [{ inserted: true }], rowCount: 1 };

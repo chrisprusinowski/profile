@@ -9,15 +9,15 @@ export const usersRouter = Router();
 const createUserSchema = z.object({
   email: z.string().email(),
   role: z.enum(APP_ROLES),
-  managerName: z.string().trim().max(255).optional().nullable(),
-  managerEmail: z.string().trim().email().optional().nullable(),
+  executiveName: z.string().trim().max(255).optional().nullable(),
+  executiveEmail: z.string().trim().email().optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
 const updateUserSchema = z.object({
   role: z.enum(APP_ROLES).optional(),
-  managerName: z.string().trim().max(255).optional().nullable(),
-  managerEmail: z.string().trim().email().optional().nullable(),
+  executiveName: z.string().trim().max(255).optional().nullable(),
+  executiveEmail: z.string().trim().email().optional().nullable(),
   isActive: z.boolean().optional(),
 });
 
@@ -32,8 +32,8 @@ usersRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
     const result = await pool.query(
       `SELECT email,
               role,
-              manager_name AS "managerName",
-              manager_email AS "managerEmail",
+              executive_name AS "executiveName",
+              executive_email AS "executiveEmail",
               is_active AS "isActive",
               created_at AS "createdAt",
               updated_at AS "updatedAt"
@@ -58,16 +58,16 @@ usersRouter.post('/', async (req: AuthenticatedRequest, res, next) => {
 
     const payload = parsed.data;
     const result = await pool.query(
-      `INSERT INTO app_users (email, role, manager_name, manager_email, is_active)
+      `INSERT INTO app_users (email, role, executive_name, executive_email, is_active)
        VALUES (lower($1), $2, NULLIF($3, ''), NULLIF(lower($4), ''), COALESCE($5, true))
        RETURNING email,
                  role,
-                 manager_name AS "managerName",
-                 manager_email AS "managerEmail",
+                 executive_name AS "executiveName",
+                 executive_email AS "executiveEmail",
                  is_active AS "isActive",
                  created_at AS "createdAt",
                  updated_at AS "updatedAt"`,
-      [payload.email, payload.role, payload.managerName ?? '', payload.managerEmail ?? '', payload.isActive],
+      [payload.email, payload.role, payload.executiveName ?? '', payload.executiveEmail ?? '', payload.isActive],
     );
 
     await logAuditEvent({
@@ -98,23 +98,23 @@ usersRouter.put('/:email', async (req: AuthenticatedRequest, res, next) => {
       return;
     }
 
-    const { role, managerName, managerEmail, isActive } = parsed.data;
+    const { role, executiveName, executiveEmail, isActive } = parsed.data;
     const result = await pool.query(
       `UPDATE app_users
        SET role = COALESCE($1, role),
-           manager_name = CASE WHEN $2::text IS NULL THEN manager_name ELSE NULLIF($2, '') END,
-           manager_email = CASE WHEN $3::text IS NULL THEN manager_email ELSE NULLIF(lower($3), '') END,
+           executive_name = CASE WHEN $2::text IS NULL THEN executive_name ELSE NULLIF($2, '') END,
+           executive_email = CASE WHEN $3::text IS NULL THEN executive_email ELSE NULLIF(lower($3), '') END,
            is_active = COALESCE($4, is_active),
            updated_at = NOW()
        WHERE lower(email) = lower($5)
        RETURNING email,
                  role,
-                 manager_name AS "managerName",
-                 manager_email AS "managerEmail",
+                 executive_name AS "executiveName",
+                 executive_email AS "executiveEmail",
                  is_active AS "isActive",
                  created_at AS "createdAt",
                  updated_at AS "updatedAt"`,
-      [role ?? null, managerName ?? null, managerEmail ?? null, isActive ?? null, req.params.email],
+      [role ?? null, executiveName ?? null, executiveEmail ?? null, isActive ?? null, req.params.email],
     );
 
     if (!result.rows[0]) {

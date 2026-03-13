@@ -7,8 +7,8 @@ export type AppRole = (typeof APP_ROLES)[number];
 export interface AppUser {
   email: string;
   role: AppRole;
-  managerName: string | null;
-  managerEmail: string | null;
+  executiveName: string | null;
+  executiveEmail: string | null;
   isActive: boolean;
 }
 
@@ -40,8 +40,8 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     const result = await pool.query(
       `SELECT email,
               role,
-              manager_name AS "managerName",
-              manager_email AS "managerEmail",
+              executive_name AS "executiveName",
+              executive_email AS "executiveEmail",
               is_active AS "isActive"
        FROM app_users
        WHERE lower(email) = lower($1)
@@ -75,45 +75,29 @@ export function requireRole(req: AuthenticatedRequest, res: Response, allowed: A
   return true;
 }
 
-export function getManagerScopeName(user: AppUser): string | null {
-  if (user.role !== 'manager') return null;
-  if (user.managerName && user.managerName.trim()) return user.managerName.trim();
-  return null;
-}
-
-export function getManagerScopeEmail(user: AppUser): string | null {
-  if (user.role !== 'manager') return null;
-  if (user.managerEmail && user.managerEmail.trim()) {
-    return user.managerEmail.trim().toLowerCase();
-  }
-  return null;
-}
-
-export function getEffectiveManagerScope(user: AppUser): {
-  managerName: string | null;
-  managerEmail: string | null;
+export function getEffectiveExecutiveScope(user: AppUser): {
+  executiveEmail: string | null;
 } {
-  const managerName = getManagerScopeName(user);
-  const configuredEmail = getManagerScopeEmail(user);
-  const managerEmail = configuredEmail ?? normalizeEmail(user.email);
-  return { managerName, managerEmail };
+  if (user.role !== 'executive') {
+    return { executiveEmail: null };
+  }
+  const configuredEmail = user.executiveEmail?.trim().toLowerCase();
+  return { executiveEmail: configuredEmail || normalizeEmail(user.email) };
 }
 
 export async function assertEmployeeInScope(user: AppUser, employeeId: string): Promise<boolean> {
-  if (user.role !== 'manager') return true;
-  const { managerName, managerEmail } = getEffectiveManagerScope(user);
-  if (!managerName && !managerEmail) return false;
+  if (user.role === 'admin') return true;
+  if (user.role !== 'executive') return false;
+  const { executiveEmail } = getEffectiveExecutiveScope(user);
+  if (!executiveEmail) return false;
 
   const result = await pool.query(
     `SELECT 1
      FROM employees
      WHERE id = $1
-       AND (
-         ($2::text IS NOT NULL AND lower(manager) = lower($2))
-         OR ($3::text IS NOT NULL AND lower(manager_email) = lower($3))
-       )
+       AND lower(executive_email) = lower($2)
      LIMIT 1`,
-    [employeeId, managerName, managerEmail],
+    [employeeId, executiveEmail],
   );
 
   return Boolean(result.rows[0]);

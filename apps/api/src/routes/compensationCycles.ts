@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import {
   assertEmployeeInScope,
-  getEffectiveManagerScope,
+  getEffectiveExecutiveScope,
   requireRole,
   type AppRole,
   type AppUser,
@@ -99,7 +99,7 @@ function createFilterClauses(filters: {
   return { clauses, values };
 }
 
-function buildManagerScopeWhere(
+function buildExecutiveScopeWhere(
   user: AppUser | undefined,
   options?: {
     employeeAlias?: string;
@@ -107,23 +107,19 @@ function buildManagerScopeWhere(
     startingParamIndex?: number;
   }
 ): { clause: string; values: string[] } {
-  if (user?.role !== 'manager') {
+  if (user?.role !== 'executive') {
     return { clause: '', values: [] };
   }
   const employeeAlias = options?.employeeAlias ?? 'e';
   const includeLeadingAnd = options?.includeLeadingAnd ?? true;
   const startingParamIndex = options?.startingParamIndex ?? 1;
-  const { managerName, managerEmail } = getEffectiveManagerScope(user);
+  const { executiveEmail } = getEffectiveExecutiveScope(user);
 
   const values: string[] = [];
   const predicates: string[] = [];
-  if (managerName) {
-    values.push(managerName);
-    predicates.push(`lower(${employeeAlias}.manager) = lower($${startingParamIndex + values.length - 1})`);
-  }
-  if (managerEmail) {
-    values.push(managerEmail);
-    predicates.push(`lower(${employeeAlias}.manager_email) = lower($${startingParamIndex + values.length - 1})`);
+  if (executiveEmail) {
+    values.push(executiveEmail);
+    predicates.push(`lower(${employeeAlias}.executive_email) = lower($${startingParamIndex + values.length - 1})`);
   }
 
   if (predicates.length === 0) {
@@ -175,7 +171,7 @@ const bulkPlanSchema = z.object({
   employeeIds: z.array(z.string()).optional(),
   filters: z.object({
     department: z.string().optional(),
-    manager: z.string().optional(),
+    executiveEmail: z.string().optional(),
     location: z.string().optional(),
     businessEntity: z.string().optional(),
     promotionOnly: z.boolean().optional(),
@@ -424,12 +420,12 @@ async function fetchTotalSummaryRows(
   }
 ) {
   const built = createFilterClauses(filters ?? {}, 2);
-  const managerScope = buildManagerScopeWhere(user, {
+  const executiveScope = buildExecutiveScopeWhere(user, {
     employeeAlias: 'e',
     includeLeadingAnd: true,
     startingParamIndex: built.values.length + 2
   });
-  const values: Array<string | number | boolean> = [cycleId, ...built.values, ...managerScope.values];
+  const values: Array<string | number | boolean> = [cycleId, ...built.values, ...executiveScope.values];
   const sql = `SELECT e.id AS "employeeId",
               e.import_batch_id AS "importBatchId",
               e.first_name AS "importedFirstName",
@@ -478,7 +474,7 @@ async function fetchTotalSummaryRows(
          ON p.employee_id = e.id AND p.cycle_id = $1
        LEFT JOIN employee_comp_outputs o
          ON o.employee_id = e.id AND o.cycle_id = $1
-       WHERE ${built.clauses.join(' AND ')}${managerScope.clause}
+       WHERE ${built.clauses.join(' AND ')}${executiveScope.clause}
        ORDER BY e.id`;
   const result = await pool.query(sql, values);
   return result.rows;
@@ -552,11 +548,11 @@ compensationCyclesRouter.post('/cycles', async (req: AuthenticatedRequest, res, 
   }
 });
 compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
-    const managerScope = buildManagerScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: 2 });
-    const values: Array<string | number> = [cycleId, ...managerScope.values];
+    const executiveScope = buildExecutiveScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: 2 });
+    const values: Array<string | number> = [cycleId, ...executiveScope.values];
     const result = await pool.query(
       `SELECT e.id AS "employeeId",
               e.name,
@@ -588,7 +584,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req: Authenticated
        FROM employees e
        LEFT JOIN employee_cycle_plans p
          ON p.employee_id = e.id AND p.cycle_id = $1
-       WHERE 1=1${managerScope.clause}
+       WHERE 1=1${executiveScope.clause}
        ORDER BY e.id`,
       values
     );
@@ -598,7 +594,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req: Authenticated
   }
 });
 compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const employeeId = String(req.params.employeeId);
@@ -762,7 +758,7 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
 });
 
 compensationCyclesRouter.post('/cycles/:cycleId/plans/bulk', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const parsed = bulkPlanSchema.safeParse(req.body);
@@ -780,9 +776,9 @@ compensationCyclesRouter.post('/cycles/:cycleId/plans/bulk', async (req: Authent
       values.push(filters.department);
       clauses.push(`e.department = $${values.length}`);
     }
-    if (filters?.manager) {
-      values.push(filters.manager);
-      clauses.push(`(e.manager = $${values.length} OR e.manager_email = $${values.length})`);
+    if (filters?.executiveEmail) {
+      values.push(filters.executiveEmail);
+      clauses.push(`lower(e.executive_email) = lower($${values.length})`);
     }
     if (filters?.location) {
       values.push(filters.location);
@@ -793,10 +789,10 @@ compensationCyclesRouter.post('/cycles/:cycleId/plans/bulk', async (req: Authent
       clauses.push(`e.business_entity = $${values.length}`);
     }
 
-    const managerScope = buildManagerScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: values.length + 1, includeLeadingAnd: false });
-    if (managerScope.clause) {
-      clauses.push(managerScope.clause);
-      values.push(...managerScope.values);
+    const executiveScope = buildExecutiveScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: values.length + 1, includeLeadingAnd: false });
+    if (executiveScope.clause) {
+      clauses.push(executiveScope.clause);
+      values.push(...executiveScope.values);
     }
 
     const targets = await pool.query(
@@ -850,7 +846,7 @@ compensationCyclesRouter.post('/cycles/:cycleId/plans/bulk', async (req: Authent
 });
 
 compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId/status', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const employeeId = String(req.params.employeeId);
@@ -895,7 +891,7 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId/status', async 
 });
 
 compensationCyclesRouter.get('/cycles/:cycleId/plans/:employeeId/audit', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const employeeId = String(req.params.employeeId);
@@ -925,12 +921,12 @@ compensationCyclesRouter.get('/cycles/:cycleId/plans/:employeeId/audit', async (
 });
 
 compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
-    const managerScope = buildManagerScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: 2 });
-    const values: Array<string | number> = [cycleId, ...managerScope.values];
+    const executiveScope = buildExecutiveScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: 2 });
+    const values: Array<string | number> = [cycleId, ...executiveScope.values];
     const outputs = await pool.query(
       `SELECT cycle_id AS "cycleId", employee_id AS "employeeId",
               compa_ratio::float AS "compaRatio",
@@ -948,7 +944,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req: Authenticat
               generated_at AS "generatedAt"
        FROM employee_comp_outputs o
        JOIN employees e ON e.id = o.employee_id
-       WHERE o.cycle_id = $1${managerScope.clause}
+       WHERE o.cycle_id = $1${executiveScope.clause}
        ORDER BY employee_id`,
       values
     );
@@ -958,7 +954,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req: Authenticat
   }
 });
 compensationCyclesRouter.get('/cycles/:cycleId/total-summary', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
@@ -990,7 +986,7 @@ const exportCompareSchema = z.object({
 });
 
 compensationCyclesRouter.post('/cycles/:cycleId/parity-review', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const parsed = parityReviewSchema.safeParse(req.body);
@@ -1037,7 +1033,7 @@ compensationCyclesRouter.post('/cycles/:cycleId/parity-review', async (req: Auth
 });
 
 compensationCyclesRouter.post('/cycles/:cycleId/export-compare', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const parsed = exportCompareSchema.safeParse(req.body);
@@ -1073,7 +1069,7 @@ compensationCyclesRouter.post('/cycles/:cycleId/export-compare', async (req: Aut
 });
 
 compensationCyclesRouter.get('/cycles/:cycleId/total-summary.export', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
@@ -1104,7 +1100,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/total-summary.export', async (req
 });
 
 compensationCyclesRouter.get('/cycles/:cycleId/total-summary.csv', async (req: AuthenticatedRequest, res, next) => {
-  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  if (!requireRole(req, res, ['admin', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
