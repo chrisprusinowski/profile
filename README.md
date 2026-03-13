@@ -177,3 +177,9 @@ Auth is intentionally local/demo-only and uses `x-demo-user-email` plus `app_use
 - Empty/filter states: verify Employees/Merit/Admin tables show explicit “no matching rows” messaging.
 - Pay range clarity: verify Merit pay-band column shows both range status and match source when available.
 - Executive usefulness: verify over-guideline count reflects merit % > guideline max and cycle locked status is visible.
+
+## Pilot rollout runbook
+
+For pilot/UAT execution (environment setup, migrations, cycle creation, historical import, parity review, and final exports), use:
+
+- `docs/pilot-checklist.md`

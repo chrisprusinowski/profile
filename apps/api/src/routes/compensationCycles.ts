@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireRole, type AppRole, type AuthenticatedRequest } from '../auth.js';
+import {
+  assertEmployeeInScope,
+  getEffectiveManagerScope,
+  requireRole,
+  type AppRole,
+  type AppUser,
+  type AuthenticatedRequest
+} from '../auth.js';
 import { pool } from '../db.js';
 import { calculateCompensationOutputs } from '../compensationCalculations.js';
 export const compensationCyclesRouter = Router();
@@ -73,23 +80,58 @@ function createFilterClauses(filters: {
   search?: string;
   department?: string;
   promotionOnly?: boolean;
-}) {
+}, startingParamIndex = 1) {
   const clauses = ['1=1'];
   const values: Array<string | number | boolean> = [];
 
   if (filters.search?.trim()) {
     values.push(`%${filters.search.trim().toLowerCase()}%`);
-    clauses.push(`(lower(e.id) LIKE $${values.length} OR lower(COALESCE(e.full_name, '')) LIKE $${values.length})`);
+    clauses.push(`(lower(e.id) LIKE $${startingParamIndex + values.length - 1} OR lower(COALESCE(e.full_name, '')) LIKE $${startingParamIndex + values.length - 1})`);
   }
   if (filters.department?.trim()) {
     values.push(filters.department.trim());
-    clauses.push(`e.department = $${values.length}`);
+    clauses.push(`e.department = $${startingParamIndex + values.length - 1}`);
   }
   if (filters.promotionOnly) {
     clauses.push(`COALESCE(p.is_promotion, false) = true`);
   }
 
   return { clauses, values };
+}
+
+function buildManagerScopeWhere(
+  user: AppUser | undefined,
+  options?: {
+    employeeAlias?: string;
+    includeLeadingAnd?: boolean;
+    startingParamIndex?: number;
+  }
+): { clause: string; values: string[] } {
+  if (user?.role !== 'manager') {
+    return { clause: '', values: [] };
+  }
+  const employeeAlias = options?.employeeAlias ?? 'e';
+  const includeLeadingAnd = options?.includeLeadingAnd ?? true;
+  const startingParamIndex = options?.startingParamIndex ?? 1;
+  const { managerName, managerEmail } = getEffectiveManagerScope(user);
+
+  const values: string[] = [];
+  const predicates: string[] = [];
+  if (managerName) {
+    values.push(managerName);
+    predicates.push(`lower(${employeeAlias}.manager) = lower($${startingParamIndex + values.length - 1})`);
+  }
+  if (managerEmail) {
+    values.push(managerEmail);
+    predicates.push(`lower(${employeeAlias}.manager_email) = lower($${startingParamIndex + values.length - 1})`);
+  }
+
+  if (predicates.length === 0) {
+    return { clause: includeLeadingAnd ? ' AND 1=0' : '1=0', values: [] };
+  }
+
+  const prefix = includeLeadingAnd ? ' AND ' : '';
+  return { clause: `${prefix}(${predicates.join(' OR ')})`, values };
 }
 
 async function getCurrentPlanningStatus(cycleId: number, employeeId: string) {
@@ -374,14 +416,20 @@ async function regenerateOutputsForCycle(cycleId: number): Promise<number> {
 
 async function fetchTotalSummaryRows(
   cycleId: number,
+  user?: AppUser,
   filters?: {
     search?: string;
     department?: string;
     promotionOnly?: boolean;
   }
 ) {
-  const built = createFilterClauses(filters ?? {});
-  const values: Array<string | number | boolean> = [cycleId, ...built.values];
+  const built = createFilterClauses(filters ?? {}, 2);
+  const managerScope = buildManagerScopeWhere(user, {
+    employeeAlias: 'e',
+    includeLeadingAnd: true,
+    startingParamIndex: built.values.length + 2
+  });
+  const values: Array<string | number | boolean> = [cycleId, ...built.values, ...managerScope.values];
   const sql = `SELECT e.id AS "employeeId",
               e.import_batch_id AS "importBatchId",
               e.first_name AS "importedFirstName",
@@ -430,7 +478,7 @@ async function fetchTotalSummaryRows(
          ON p.employee_id = e.id AND p.cycle_id = $1
        LEFT JOIN employee_comp_outputs o
          ON o.employee_id = e.id AND o.cycle_id = $1
-       WHERE ${built.clauses.join(' AND ')}
+       WHERE ${built.clauses.join(' AND ')}${managerScope.clause}
        ORDER BY e.id`;
   const result = await pool.query(sql, values);
   return result.rows;
@@ -503,9 +551,12 @@ compensationCyclesRouter.post('/cycles', async (req: AuthenticatedRequest, res, 
     next(error);
   }
 });
-compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req, res, next) => {
+compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
+    const managerScope = buildManagerScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: 2 });
+    const values: Array<string | number> = [cycleId, ...managerScope.values];
     const result = await pool.query(
       `SELECT e.id AS "employeeId",
               e.name,
@@ -537,8 +588,9 @@ compensationCyclesRouter.get('/cycles/:cycleId/plans', async (req, res, next) =>
        FROM employees e
        LEFT JOIN employee_cycle_plans p
          ON p.employee_id = e.id AND p.cycle_id = $1
+       WHERE 1=1${managerScope.clause}
        ORDER BY e.id`,
-      [cycleId]
+      values
     );
     res.json({ data: result.rows });
   } catch (error) {
@@ -550,6 +602,9 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId', async (req: A
   try {
     const cycleId = Number(req.params.cycleId);
     const employeeId = String(req.params.employeeId);
+    if (!(await assertEmployeeInScope(req.user!, employeeId))) {
+      return res.status(404).json({ error: 'not_found', message: `Employee ${employeeId} not found in scope` });
+    }
     const parsed = planSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -738,6 +793,12 @@ compensationCyclesRouter.post('/cycles/:cycleId/plans/bulk', async (req: Authent
       clauses.push(`e.business_entity = $${values.length}`);
     }
 
+    const managerScope = buildManagerScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: values.length + 1, includeLeadingAnd: false });
+    if (managerScope.clause) {
+      clauses.push(managerScope.clause);
+      values.push(...managerScope.values);
+    }
+
     const targets = await pool.query(
       `SELECT e.id AS "employeeId", p.planning_status AS "planningStatus"
        FROM employees e
@@ -793,6 +854,9 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId/status', async 
   try {
     const cycleId = Number(req.params.cycleId);
     const employeeId = String(req.params.employeeId);
+    if (!(await assertEmployeeInScope(req.user!, employeeId))) {
+      return res.status(404).json({ error: 'not_found', message: `Employee ${employeeId} not found in scope` });
+    }
     const parsed = z.object({ status: plannerStatusSchema }).safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -830,10 +894,14 @@ compensationCyclesRouter.put('/cycles/:cycleId/plans/:employeeId/status', async 
   }
 });
 
-compensationCyclesRouter.get('/cycles/:cycleId/plans/:employeeId/audit', async (req, res, next) => {
+compensationCyclesRouter.get('/cycles/:cycleId/plans/:employeeId/audit', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const employeeId = String(req.params.employeeId);
+    if (!(await assertEmployeeInScope(req.user!, employeeId))) {
+      return res.status(404).json({ error: 'not_found', message: `Employee ${employeeId} not found in scope` });
+    }
     const limit = Math.min(Math.max(Number(req.query.limit ?? 25), 1), 200);
     const result = await pool.query(
       `SELECT id,
@@ -856,10 +924,13 @@ compensationCyclesRouter.get('/cycles/:cycleId/plans/:employeeId/audit', async (
   }
 });
 
-compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req, res, next) => {
+compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
+    const managerScope = buildManagerScopeWhere(req.user, { employeeAlias: 'e', startingParamIndex: 2 });
+    const values: Array<string | number> = [cycleId, ...managerScope.values];
     const outputs = await pool.query(
       `SELECT cycle_id AS "cycleId", employee_id AS "employeeId",
               compa_ratio::float AS "compaRatio",
@@ -875,21 +946,23 @@ compensationCyclesRouter.get('/cycles/:cycleId/outputs', async (req, res, next) 
               missing_data_reasons AS "missingDataReasons",
               calc_version AS "calcVersion",
               generated_at AS "generatedAt"
-       FROM employee_comp_outputs
-       WHERE cycle_id = $1
+       FROM employee_comp_outputs o
+       JOIN employees e ON e.id = o.employee_id
+       WHERE o.cycle_id = $1${managerScope.clause}
        ORDER BY employee_id`,
-      [cycleId]
+      values
     );
     res.json({ data: outputs.rows });
   } catch (error) {
     next(error);
   }
 });
-compensationCyclesRouter.get('/cycles/:cycleId/total-summary', async (req, res, next) => {
+compensationCyclesRouter.get('/cycles/:cycleId/total-summary', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
-    const rows = await fetchTotalSummaryRows(cycleId, {
+    const rows = await fetchTotalSummaryRows(cycleId, req.user, {
       search: typeof req.query.search === 'string' ? req.query.search : undefined,
       department: typeof req.query.department === 'string' ? req.query.department : undefined,
       promotionOnly: parseBooleanQuery(req.query.promotionOnly)
@@ -908,7 +981,16 @@ const parityReviewSchema = z.object({
   })).min(1)
 });
 
-compensationCyclesRouter.post('/cycles/:cycleId/parity-review', async (req, res, next) => {
+const exportCompareSchema = z.object({
+  expected: z.array(z.object({
+    employeeId: z.string(),
+    fields: z.record(z.any())
+  })).min(1),
+  fields: z.array(z.string()).optional()
+});
+
+compensationCyclesRouter.post('/cycles/:cycleId/parity-review', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     const parsed = parityReviewSchema.safeParse(req.body);
@@ -916,7 +998,7 @@ compensationCyclesRouter.post('/cycles/:cycleId/parity-review', async (req, res,
       return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
     }
     await regenerateOutputsForCycle(cycleId);
-    const rows = await fetchTotalSummaryRows(cycleId);
+    const rows = await fetchTotalSummaryRows(cycleId, req.user);
     const byEmployee = new Map(rows.map((row) => [String(row.employeeId), row]));
     const mismatches: Array<{ employeeId: string; field: string; expected: unknown; actual: unknown }> = [];
     for (const record of parsed.data.expected) {
@@ -928,13 +1010,70 @@ compensationCyclesRouter.post('/cycles/:cycleId/parity-review', async (req, res,
         }
       }
     }
-    res.json({ data: { comparedEmployees: parsed.data.expected.length, mismatchCount: mismatches.length, mismatches } });
+    const mismatchesByEmployee = mismatches.reduce<Record<string, Array<{ field: string; expected: unknown; actual: unknown }>>>(
+      (acc, mismatch) => {
+        acc[mismatch.employeeId] ??= [];
+        acc[mismatch.employeeId].push({ field: mismatch.field, expected: mismatch.expected, actual: mismatch.actual });
+        return acc;
+      },
+      {}
+    );
+    const mismatchesByField = mismatches.reduce<Record<string, number>>((acc, mismatch) => {
+      acc[mismatch.field] = (acc[mismatch.field] ?? 0) + 1;
+      return acc;
+    }, {});
+    res.json({
+      data: {
+        comparedEmployees: parsed.data.expected.length,
+        mismatchCount: mismatches.length,
+        mismatches,
+        mismatchesByEmployee,
+        mismatchesByField
+      }
+    });
   } catch (error) {
     next(error);
   }
 });
 
-compensationCyclesRouter.get('/cycles/:cycleId/total-summary.export', async (req, res, next) => {
+compensationCyclesRouter.post('/cycles/:cycleId/export-compare', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
+  try {
+    const cycleId = Number(req.params.cycleId);
+    const parsed = exportCompareSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    }
+    await regenerateOutputsForCycle(cycleId);
+    const rows = await fetchTotalSummaryRows(cycleId, req.user);
+    const byEmployee = new Map(rows.map((row) => [String(row.employeeId), row]));
+    const selectedFields = parsed.data.fields && parsed.data.fields.length > 0 ? new Set(parsed.data.fields) : null;
+    const mismatches: Array<{ employeeId: string; field: string; expected: unknown; actual: unknown }> = [];
+    for (const record of parsed.data.expected) {
+      const actual = byEmployee.get(record.employeeId);
+      for (const [field, expectedValue] of Object.entries(record.fields)) {
+        if (selectedFields && !selectedFields.has(field)) continue;
+        const actualValue = actual?.[field as keyof (typeof rows)[number]] ?? null;
+        if (!sameValue(actualValue, expectedValue)) {
+          mismatches.push({ employeeId: record.employeeId, field, expected: expectedValue, actual: actualValue });
+        }
+      }
+    }
+    res.json({
+      data: {
+        comparedEmployees: parsed.data.expected.length,
+        comparedFields: selectedFields ? Array.from(selectedFields) : null,
+        mismatchCount: mismatches.length,
+        mismatches
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+compensationCyclesRouter.get('/cycles/:cycleId/total-summary.export', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
@@ -943,7 +1082,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/total-summary.export', async (req
       department: typeof req.query.department === 'string' ? req.query.department : null,
       promotionOnly: parseBooleanQuery(req.query.promotionOnly)
     };
-    const rows = await fetchTotalSummaryRows(cycleId, {
+    const rows = await fetchTotalSummaryRows(cycleId, req.user, {
       search: filterSummary.search ?? undefined,
       department: filterSummary.department ?? undefined,
       promotionOnly: filterSummary.promotionOnly
@@ -964,7 +1103,8 @@ compensationCyclesRouter.get('/cycles/:cycleId/total-summary.export', async (req
   }
 });
 
-compensationCyclesRouter.get('/cycles/:cycleId/total-summary.csv', async (req, res, next) => {
+compensationCyclesRouter.get('/cycles/:cycleId/total-summary.csv', async (req: AuthenticatedRequest, res, next) => {
+  if (!requireRole(req, res, ['admin', 'manager', 'executive'])) return;
   try {
     const cycleId = Number(req.params.cycleId);
     await regenerateOutputsForCycle(cycleId);
@@ -973,7 +1113,7 @@ compensationCyclesRouter.get('/cycles/:cycleId/total-summary.csv', async (req, r
       department: typeof req.query.department === 'string' ? req.query.department : null,
       promotionOnly: parseBooleanQuery(req.query.promotionOnly)
     };
-    const rows = await fetchTotalSummaryRows(cycleId, {
+    const rows = await fetchTotalSummaryRows(cycleId, req.user, {
       search: filterSummary.search ?? undefined,
       department: filterSummary.department ?? undefined,
       promotionOnly: filterSummary.promotionOnly
