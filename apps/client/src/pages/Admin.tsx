@@ -138,12 +138,12 @@ export function Admin({
       return;
     }
     if (
-      newRole === 'manager' &&
+      newRole === 'executive' &&
       !newManagerName.trim() &&
       !newManagerEmail.trim()
     ) {
       setUserError(
-        'Manager users need either Manager Scope Name or Manager Scope Email.'
+        'Executive users need an assigned Executive Email.'
       );
       return;
     }
@@ -152,12 +152,12 @@ export function Admin({
       await createAppUser({
         email,
         role: newRole,
-        managerName: newRole === 'manager' ? newManagerName.trim() : '',
-        managerEmail: newRole === 'manager' ? newManagerEmail.trim() : ''
+        executiveName: newRole === 'executive' ? newManagerName.trim() : '',
+        executiveEmail: newRole === 'executive' ? newManagerEmail.trim() : ''
       });
       showToast('App user created');
       setNewEmail('');
-      setNewRole('manager');
+      setNewRole('executive');
       setNewManagerName('');
       setNewManagerEmail('');
       await refreshAll();
@@ -864,7 +864,7 @@ export function Admin({
                   className="form-input"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="new.manager@demo.com"
+                  placeholder="new.executive@demo.com"
                 />
               </div>
               <div className="form-group">
@@ -879,10 +879,10 @@ export function Admin({
                   <option value="manager">manager</option>
                 </select>
               </div>
-              {newRole === 'manager' && (
+              {newRole === 'executive' && (
                 <>
                   <div className="form-group">
-                    <label className="form-label">Manager Scope Name</label>
+                    <label className="form-label">Executive</label>
                     <input
                       className="form-input"
                       value={newManagerName}
@@ -892,7 +892,7 @@ export function Admin({
                   </div>
                   <div className="form-group">
                     <label className="form-label">
-                      Manager Scope Email (preferred)
+                      Executive Email
                     </label>
                     <input
                       className="form-input"
@@ -924,8 +924,8 @@ export function Admin({
                 <tr>
                   <th>Email</th>
                   <th>Role</th>
-                  <th>Manager Scope</th>
-                  <th>Manager Email</th>
+                  <th>Assigned Executive</th>
+                  <th>Executive Email</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -946,8 +946,8 @@ export function Admin({
                   <tr key={user.email}>
                     <td>{user.email}</td>
                     <td>{user.role}</td>
-                    <td>{user.managerName || '—'}</td>
-                    <td>{user.managerEmail || '—'}</td>
+                    <td>{user.executiveName || '—'}</td>
+                    <td>{user.executiveEmail || '—'}</td>
                     <td>{user.isActive ? 'Active' : 'Inactive'}</td>
                     <td>
                       <button

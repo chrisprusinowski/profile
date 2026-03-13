@@ -62,7 +62,7 @@ export function Layout({ cycle, flaggedCount = 0, currentUser, onSwitchUser, chi
             </select>
             <div style={{ marginTop: 8, color: 'var(--gray-500)', fontSize: 12 }}>
               Active role: <strong style={{ color: 'var(--gray-700)' }}>{currentUser.role}</strong>
-              {currentUser.managerName ? ` (${currentUser.managerName})` : ''}
+              {currentUser.executiveName ? ` (${currentUser.executiveName})` : ''}
             </div>
           </div>
         </div>

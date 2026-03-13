@@ -11,9 +11,9 @@ vi.mock('../db.js', () => ({
 }));
 
 function makeApp(options?: {
-  role?: 'admin' | 'manager' | 'executive';
-  managerName?: string | null;
-  managerEmail?: string | null;
+  role?: 'admin' | 'executive' | 'manager';
+  executiveName?: string | null;
+  executiveEmail?: string | null;
 }) {
   const role = options?.role ?? 'admin';
   const app = express();
@@ -22,8 +22,8 @@ function makeApp(options?: {
     (req as any).user = {
       email: `${role}@demo.com`,
       role,
-      managerName: options?.managerName ?? null,
-      managerEmail: options?.managerEmail ?? null,
+      executiveName: options?.executiveName ?? null,
+      executiveEmail: options?.executiveEmail ?? null,
       isActive: true
     };
     next();
@@ -48,7 +48,7 @@ describe('compensationCycles router', () => {
       .mockResolvedValueOnce({ rows: [{ id: 1 }], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [{ planningStatus: 'finalized' }], rowCount: 1 });
 
-    const app = await makeApp({ role: 'manager', managerName: 'Mgr One' });
+    const app = await makeApp({ role: 'executive', executiveName: 'Exec One' });
     const response = await request(app)
       .put('/api/v1/compensation/cycles/1/plans/E1')
       .send({ meritIncreasePercent: 3 });
@@ -78,7 +78,7 @@ describe('compensationCycles router', () => {
   it('rejects invalid status transition', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ planningStatus: 'not_started' }], rowCount: 1 });
 
-    const app = await makeApp({ role: 'manager', managerName: 'Mgr One' });
+    const app = await makeApp({ role: 'executive', executiveName: 'Exec One' });
     const response = await request(app)
       .put('/api/v1/compensation/cycles/1/plans/E1/status')
       .send({ status: 'finalized' });
@@ -96,26 +96,25 @@ describe('compensationCycles router', () => {
       .put('/api/v1/compensation/cycles/1/plans/E1/status')
       .send({ status: 'finalized' });
 
-    expect(response.status).toBe(403);
-    expect(response.body.message).toContain('Only admin can finalize');
+    expect(response.status).toBe(409);
+    expect(response.body.message).toContain('Cannot move from not_started to finalized');
   });
 
-  it('filters plan reads to manager scope', async () => {
+  it('filters plan reads to executive scope', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
 
-    const app = await makeApp({ role: 'manager', managerName: 'Jamie Rivera', managerEmail: 'manager1@demo.com' });
+    const app = await makeApp({ role: 'executive', executiveName: 'Exec One', executiveEmail: 'executive@demo.com' });
     await request(app).get('/api/v1/compensation/cycles/1/plans');
 
     const [sql, params] = mockQuery.mock.calls[0];
-    expect(sql).toContain('lower(e.manager) = lower($2)');
-    expect(sql).toContain('lower(e.manager_email) = lower($3)');
-    expect(params).toEqual([1, 'Jamie Rivera', 'manager1@demo.com']);
+    expect(sql).toContain('lower(e.executive_email) = lower($2)');
+    expect(params).toEqual([1, 'executive@demo.com']);
   });
 
-  it('blocks manager write outside scope', async () => {
+  it('blocks executive write outside scope', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
 
-    const app = await makeApp({ role: 'manager', managerName: 'Jamie Rivera', managerEmail: 'manager1@demo.com' });
+    const app = await makeApp({ role: 'executive', executiveName: 'Exec One', executiveEmail: 'executive@demo.com' });
     const response = await request(app)
       .put('/api/v1/compensation/cycles/1/plans/E9')
       .send({ meritIncreasePercent: 3 });

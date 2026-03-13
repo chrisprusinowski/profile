@@ -299,8 +299,8 @@ export async function fetchAppUsers(): Promise<AppUserRecord[]> {
 export async function createAppUser(payload: {
   email: string;
   role: AppUser['role'];
-  managerName?: string;
-  managerEmail?: string;
+  executiveName?: string;
+  executiveEmail?: string;
   isActive?: boolean;
 }): Promise<AppUserRecord> {
   requireApi();
@@ -319,8 +319,8 @@ export async function updateAppUser(
   email: string,
   payload: {
     role?: AppUser['role'];
-    managerName?: string;
-    managerEmail?: string;
+    executiveName?: string;
+    executiveEmail?: string;
     isActive?: boolean;
   }
 ): Promise<AppUserRecord> {

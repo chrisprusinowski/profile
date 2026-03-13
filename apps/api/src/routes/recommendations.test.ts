@@ -17,9 +17,9 @@ vi.mock('../audit.js', () => ({
 
 function makeApp(user: {
   email: string;
-  role: 'admin' | 'manager' | 'executive';
-  managerName: string | null;
-  managerEmail: string | null;
+  role: 'admin' | 'executive' | 'manager';
+  executiveName: string | null;
+  executiveEmail: string | null;
 }) {
   const app = express();
   app.use(express.json());
@@ -77,8 +77,8 @@ describe('recommendations routes', () => {
     const app = await makeApp({
       email: 'admin@demo.com',
       role: 'admin',
-      managerName: null,
-      managerEmail: null
+      executiveName: null,
+      executiveEmail: null
     });
 
     const response = await request(app).get('/api/v1/recommendations');
@@ -90,7 +90,7 @@ describe('recommendations routes', () => {
     expect(sqlCalls.some((sql) => sql.includes('FROM employees e'))).toBe(true);
   });
 
-  it('manager scoped query includes employees whose manager field stores manager email', async () => {
+  it('executive scoped query uses executive email', async () => {
     mockQuery.mockImplementation(async (sql: string) => {
       if (sql.includes('FROM merit_cycles')) {
         return {
@@ -111,10 +111,10 @@ describe('recommendations routes', () => {
     });
 
     const app = await makeApp({
-      email: 'manager@demo.com',
-      role: 'manager',
-      managerName: null,
-      managerEmail: null
+      email: 'executive@demo.com',
+      role: 'executive',
+      executiveName: null,
+      executiveEmail: null
     });
 
     const response = await request(app).get('/api/v1/recommendations');
@@ -124,7 +124,7 @@ describe('recommendations routes', () => {
     const scopedSql = mockQuery.mock.calls
       .map((call) => String(call[0]))
       .find((sql) => sql.includes('INNER JOIN employees e') && sql.includes('mr.cycle_id = $1'));
-    expect(scopedSql).toContain('lower(e.manager) = lower($3)');
+    expect(scopedSql).toContain('lower(e.executive_email) = lower($2)');
   });
 
   it('returns clear eligibility message when employee is excluded by cycle settings', async () => {
@@ -151,17 +151,17 @@ describe('recommendations routes', () => {
     });
 
     const app = await makeApp({
-      email: 'manager@demo.com',
-      role: 'manager',
-      managerName: null,
-      managerEmail: null
+      email: 'executive@demo.com',
+      role: 'executive',
+      executiveName: null,
+      executiveEmail: null
     });
 
     const response = await request(app)
       .put('/api/v1/recommendations/E902')
       .send({ meritPct: 3 });
 
-    expect(response.status).toBe(400);
-    expect(response.body.error).toContain('ineligible for this cycle');
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain('read-only in current workflow state');
   });
 });

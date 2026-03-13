@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import {
   assertEmployeeInScope,
-  getEffectiveManagerScope,
+  getEffectiveExecutiveScope,
   requireRole,
   type AuthenticatedRequest
 } from '../auth.js';
@@ -80,10 +80,9 @@ async function getScopedRecommendations(
   cycleId: number,
   req: AuthenticatedRequest
 ) {
-  const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
-    getEffectiveManagerScope(req.user!);
+  const { executiveEmail } = getEffectiveExecutiveScope(req.user!);
   const result =
-    managerScopeName || managerScopeEmail
+    req.user?.role === 'executive'
       ? await pool.query(
           `SELECT mr.employee_id AS "employeeId",
                 mr.merit_pct::float AS "meritPct",
@@ -103,10 +102,8 @@ async function getScopedRecommendations(
          FROM merit_recommendations mr
          INNER JOIN employees e ON e.id = mr.employee_id
          WHERE mr.cycle_id = $1
-           AND (($2::text IS NOT NULL AND lower(e.manager) = lower($2))
-             OR ($3::text IS NOT NULL AND lower(e.manager_email) = lower($3))
-             OR ($3::text IS NOT NULL AND lower(e.manager) = lower($3)))`,
-          [cycleId, managerScopeName, managerScopeEmail]
+           AND lower(e.executive_email) = lower($2)`,
+          [cycleId, executiveEmail]
         )
       : await pool.query(
           `SELECT employee_id AS "employeeId",
@@ -138,16 +135,13 @@ async function seedMissingRecommendationsForScope(
   cycleId: number,
   req: AuthenticatedRequest
 ) {
-  const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
-    getEffectiveManagerScope(req.user!);
+  const { executiveEmail } = getEffectiveExecutiveScope(req.user!);
 
   const params: Array<number | string | null> = [cycleId];
   let scopedWhere = '';
-  if (managerScopeName || managerScopeEmail) {
-    params.push(managerScopeName, managerScopeEmail);
-    scopedWhere = `AND (( $2::text IS NOT NULL AND lower(e.manager) = lower($2))
-                  OR ( $3::text IS NOT NULL AND lower(e.manager_email) = lower($3))
-                  OR ( $3::text IS NOT NULL AND lower(e.manager) = lower($3)))`;
+  if (req.user?.role === 'executive') {
+    params.push(executiveEmail);
+    scopedWhere = `AND lower(e.executive_email) = lower($2)`;
   }
 
   const updatedByPlaceholder = `$${params.length + 1}`;
@@ -209,7 +203,7 @@ recommendationsRouter.get('/', async (req: AuthenticatedRequest, res, next) => {
 recommendationsRouter.put(
   '/:employeeId',
   async (req: AuthenticatedRequest, res, next) => {
-    if (!requireRole(req, res, ['admin', 'manager'])) return;
+    if (!requireRole(req, res, ['admin', 'executive'])) return;
 
     try {
       const employeeId = String(req.params.employeeId);
@@ -381,7 +375,7 @@ recommendationsRouter.put(
 recommendationsRouter.post(
   '/submit-all',
   async (req: AuthenticatedRequest, res, next) => {
-    if (!requireRole(req, res, ['admin', 'manager'])) return;
+    if (!requireRole(req, res, ['admin', 'executive'])) return;
 
     try {
       const cycle = await getCurrentCycle();
@@ -392,28 +386,26 @@ recommendationsRouter.post(
         return;
       }
 
-      if (req.user!.role === 'manager' && cycle.status !== 'open') {
+      if (req.user!.role === 'executive' && cycle.status !== 'open') {
         res
           .status(409)
-          .json({ error: 'Cycle is not open for manager submissions' });
+          .json({ error: 'Cycle is not open for executive submissions' });
         return;
       }
 
-      const { managerName: managerScopeName, managerEmail: managerScopeEmail } =
-        getEffectiveManagerScope(req.user!);
+      const { executiveEmail } = getEffectiveExecutiveScope(req.user!);
       const result =
-        managerScopeName || managerScopeEmail
+        req.user!.role === 'executive'
           ? await pool.query(
               `UPDATE merit_recommendations mr
-           SET status = 'Submitted', submitted_at = NOW(), submitted_by = lower($4), updated_at = NOW(), updated_by = lower($4)
+           SET status = 'Submitted', submitted_at = NOW(), submitted_by = lower($3), updated_at = NOW(), updated_by = lower($3)
            FROM employees e
            WHERE mr.employee_id = e.id
              AND mr.cycle_id = $1
              AND mr.status = 'Draft'
-             AND (($2::text IS NOT NULL AND lower(e.manager) = lower($2))
-               OR ($3::text IS NOT NULL AND lower(e.manager_email) = lower($3)))
+             AND lower(e.executive_email) = lower($2)
            RETURNING mr.employee_id AS "employeeId"`,
-              [cycle.id, managerScopeName, managerScopeEmail, req.user!.email]
+              [cycle.id, executiveEmail, req.user!.email]
             )
           : await pool.query(
               `UPDATE merit_recommendations
