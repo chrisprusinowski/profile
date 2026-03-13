@@ -19,7 +19,9 @@
     "db:migrate": "npm run db:migrate:local",
     "dev:fullstack": "npm run dev:postgres && npm run db:migrate && (npm run dev:api & npm run dev:client)",
     "db:migrate:docker": "docker compose run --rm -e DATABASE_URL=postgresql://app_user:app_password@postgres:5432/app_db api npm run db:migrate",
-    "db:migrate:local": "node scripts/migrate.mjs"
+    "db:migrate:local": "node scripts/migrate.mjs",
+    "pilot:load-historical": "node scripts/pilot/load-historical-dataset.mjs",
+    "pilot:export-compare": "node scripts/pilot/export-compare.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.12.0",
